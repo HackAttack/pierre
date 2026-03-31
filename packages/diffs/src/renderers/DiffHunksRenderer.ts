@@ -80,6 +80,11 @@ import { isDefaultRenderRange } from '../utils/isDefaultRenderRange';
 import { isDiffPlainText } from '../utils/isDiffPlainText';
 import type { DiffLineMetadata } from '../utils/iterateOverDiff';
 import { iterateOverDiff } from '../utils/iterateOverDiff';
+import {
+  normalizeDiffDecorations,
+  type NormalizedLineDecorationMap,
+  type NormalizedLineDecorations,
+} from '../utils/normalizeLineDecorations';
 import { renderDiffWithHighlighter } from '../utils/renderDiffWithHighlighter';
 import {
   recomputeDiffHunksForEdit,
@@ -252,6 +257,8 @@ export class DiffHunksRenderer<
 
   private deletionAnnotations: AnnotationLineMap<LAnnotation> = {};
   private additionAnnotations: AnnotationLineMap<LAnnotation> = {};
+  private deletionDecorationsByLine: NormalizedLineDecorationMap = {};
+  private additionDecorationsByLine: NormalizedLineDecorationMap = {};
 
   private computedLangs: SupportedLanguages[] = ['text'];
   private renderCache: DiffRenderCache | undefined;
@@ -293,6 +300,8 @@ export class DiffHunksRenderer<
   }
 
   public recycle(): void {
+    this.deletionDecorationsByLine = {};
+    this.additionDecorationsByLine = {};
     this.highlighter = undefined;
     this.diff = undefined;
     this.clearRenderCache();
@@ -793,8 +802,13 @@ export class DiffHunksRenderer<
     diff.editSessionDirty = true;
   }
   public setDecorations(
-    _decorations: readonly DiffDecorationItem<LDecoration>[]
-  ): void {}
+    decorations: readonly DiffDecorationItem<LDecoration>[]
+  ): void {
+    const maps = normalizeDiffDecorations(decorations);
+    this.additionDecorationsByLine = maps.additions;
+    this.deletionDecorationsByLine = maps.deletions;
+  }
+
   protected getUnifiedLineDecoration({
     lineType,
   }: UnifiedLineDecorationProps): LineDecoration {
@@ -822,6 +836,18 @@ export class DiffHunksRenderer<
         'data-line-type': lineType,
       },
     };
+  }
+
+  protected getLineDecorations(
+    side: 'deletions' | 'additions',
+    lineNumber: number | undefined
+  ): NormalizedLineDecorations | undefined {
+    if (lineNumber == null) {
+      return undefined;
+    }
+    return side === 'deletions'
+      ? this.deletionDecorationsByLine[lineNumber]
+      : this.additionDecorationsByLine[lineNumber];
   }
 
   private createAnnotationElement = (span: AnnotationSpan): HASTElement => {

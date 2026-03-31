@@ -781,6 +781,35 @@ export class FileDiff<
   public setDecorations(decorations: DiffDecorationItem<LDecoration>[]): void {
     this.decorations = decorations;
   }
+
+  // Hidden virtualized diffs can adopt annotations before their renderer runs,
+  // so every resumed base render must feed the renderer the latest collection.
+  private syncRenderState({
+    nextLineAnnotations,
+    nextDecorations,
+    syncAnnotations,
+    syncDecorations,
+  }: {
+    nextLineAnnotations?: DiffLineAnnotation<LAnnotation>[];
+    nextDecorations?: DiffDecorationItem<LDecoration>[];
+    syncAnnotations: boolean;
+    syncDecorations: boolean;
+  }): void {
+    if (syncAnnotations && nextLineAnnotations != null) {
+      this.setLineAnnotations(nextLineAnnotations);
+    }
+
+    if (syncDecorations && nextDecorations != null) {
+      this.setDecorations(nextDecorations);
+    }
+
+    this.hunksRenderer.setLineAnnotations(this.getLatestAnnotations());
+
+    if (syncDecorations) {
+      this.hunksRenderer.setDecorations(this.decorations);
+    }
+  }
+
   private canPartiallyRender(
     forceRender: boolean,
     annotationsChanged: boolean,
@@ -931,6 +960,7 @@ export class FileDiff<
     this.mounted = false;
     if (!recycle) {
       this.lineAnnotations = [];
+      this.decorations = [];
     }
     this.clearAuxiliaryNodes();
     this.annotationCache.clear();
@@ -1139,12 +1169,18 @@ export class FileDiff<
         ? parseDiffFromFile(oldFile, newFile, this.options.parseDiffOptions)
         : undefined);
 
+    this.syncRenderState({
+      nextLineAnnotations: lineAnnotations,
+      nextDecorations: decorations,
+      syncAnnotations: true,
+      syncDecorations: true,
+    });
+
     if (this.pre == null) {
       return;
     }
 
     this.syncInteractionOptions();
-    this.hunksRenderer.setDecorations(this.decorations);
     this.hunksRenderer.hydrate(this.fileDiff);
     this.renderedDiff = this.fileDiff;
     // FIXME(amadeus): not sure how to handle this yet...
@@ -1467,7 +1503,6 @@ export class FileDiff<
     const nextRenderRange = collapsed ? undefined : renderRange;
     const themeChanged = this.hasThemeChanged();
     const hasFileInput = fileInput != null;
-    const nextDecorations = decorations;
     const filesDidChange =
       hasFileInput &&
       (!areOptionalFilesEqual(oldFile, this.deletionFile) ||
@@ -1480,9 +1515,9 @@ export class FileDiff<
         ? this.isNewAnnotations(lineAnnotations)
         : false;
     const decorationsChanged =
-      nextDecorations != null &&
-      (nextDecorations.length > 0 || this.decorations.length > 0)
-        ? nextDecorations !== this.decorations
+      decorations != null &&
+      (decorations.length > 0 || this.decorations.length > 0)
+        ? decorations !== this.decorations
         : false;
     if (
       !collapsed &&
@@ -1542,14 +1577,15 @@ export class FileDiff<
       this.clearReusableHeader();
     }
 
-    if (lineAnnotations != null) {
-      this.setLineAnnotations(lineAnnotations);
-    }
-
+    this.hunksRenderer.setOptions(this.getHunksRendererOptions(this.options));
+    this.syncInteractionOptions();
+    this.syncRenderState({
+      nextLineAnnotations: lineAnnotations,
+      nextDecorations: decorations,
+      syncAnnotations: annotationsChanged,
+      syncDecorations: decorationsChanged,
+    });
     const latestDiff = this.getLatestDiff();
-    if (nextDecorations != null) {
-      this.decorations = nextDecorations;
-    }
     if (latestDiff == null) {
       return false;
     }
@@ -1566,11 +1602,6 @@ export class FileDiff<
     if (expandUnchanged) {
       this.loadFilesIfNecessary();
     }
-    this.hunksRenderer.setOptions(this.getHunksRendererOptions(this.options));
-    this.syncInteractionOptions();
-
-    this.hunksRenderer.setLineAnnotations(this.getLatestAnnotations());
-    this.hunksRenderer.setDecorations(this.decorations);
     const { disableErrorHandling = false, disableFileHeader = false } =
       this.options;
 
