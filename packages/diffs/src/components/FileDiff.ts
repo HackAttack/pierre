@@ -54,6 +54,7 @@ import type {
   BaseCodeOptions,
   BaseDiffOptions,
   CustomPreProperties,
+  DiffDecorationItem,
   DiffLineAnnotation,
   ExpansionDirections,
   DiffsHighlighter,
@@ -219,7 +220,7 @@ function canRestoreDiffSession(
   );
 }
 
-export interface FileDiffRenderBaseProps<LAnnotation> {
+export interface FileDiffRenderBaseProps<LAnnotation, LDecoration = undefined> {
   fileDiff?: FileDiffMetadata;
   deferManagers?: boolean;
   forceRender?: boolean;
@@ -227,14 +228,17 @@ export interface FileDiffRenderBaseProps<LAnnotation> {
   fileContainer?: HTMLElement;
   containerWrapper?: HTMLElement;
   lineAnnotations?: DiffLineAnnotation<LAnnotation>[];
+  decorations?: DiffDecorationItem<LDecoration>[];
   renderRange?: RenderRange;
 }
 
-export type FileDiffRenderProps<LAnnotation> =
-  FileDiffRenderBaseProps<LAnnotation> & MaybeDiffFileInput;
+export type FileDiffRenderProps<
+  LAnnotation,
+  LDecoration = undefined,
+> = FileDiffRenderBaseProps<LAnnotation, LDecoration> & MaybeDiffFileInput;
 
-export type FileDiffHydrationProps<LAnnotation> = Omit<
-  FileDiffRenderBaseProps<LAnnotation>,
+export type FileDiffHydrationProps<LAnnotation, LDecoration = undefined> = Omit<
+  FileDiffRenderBaseProps<LAnnotation, LDecoration>,
   'fileContainer'
 > &
   MaybeDiffFileInput & {
@@ -260,7 +264,11 @@ export type FileDiffEditCompleteHandler<LAnnotation, Caret> = (
   event: FileDiffEditCompleteEvent<LAnnotation, Caret>
 ) => EditCompletionDecision;
 
-export interface FileDiffOptions<LAnnotation, Caret>
+export interface FileDiffOptions<
+  LAnnotation = undefined,
+  LDecoration = undefined,
+  Caret = undefined,
+>
   extends
     Omit<BaseDiffOptions, 'hunkSeparators'>,
     InteractionManagerBaseOptions<'diff'> {
@@ -271,7 +279,7 @@ export interface FileDiffOptions<LAnnotation, Caret>
        */
     | ((
         hunk: HunkData,
-        instance: FileDiff<LAnnotation, Caret>
+        instance: FileDiff<LAnnotation, LDecoration, Caret>
       ) => HTMLElement | DocumentFragment | null | undefined);
   disableFileHeader?: boolean;
   renderHeaderPrefix?: RenderHeaderPrefixCallback;
@@ -293,7 +301,7 @@ export interface FileDiffOptions<LAnnotation, Caret>
 
   onPostRender?(
     node: HTMLElement,
-    instance: FileDiff<LAnnotation, Caret>,
+    instance: FileDiff<LAnnotation, LDecoration, Caret>,
     phase: PostRenderPhase
   ): unknown;
 
@@ -353,9 +361,10 @@ interface PendingFileLoad {
   promise: Promise<void>;
 }
 
-type HydrationSetup<LAnnotation> = {
+type HydrationSetup<LAnnotation, LDecoration> = {
   fileDiff: FileDiffMetadata | undefined;
   lineAnnotations: DiffLineAnnotation<LAnnotation>[] | undefined;
+  decorations: DiffDecorationItem<LDecoration>[] | undefined;
 } & MaybeDiffFileInput;
 
 interface HeaderCache {
@@ -380,7 +389,11 @@ interface EditSession<LAnnotation> {
 
 let instanceId = -1;
 
-export class FileDiff<LAnnotation = undefined, Caret = undefined> {
+export class FileDiff<
+  LAnnotation = undefined,
+  LDecoration = undefined,
+  Caret = undefined,
+> {
   // NOTE(amadeus): We sorta need this to ensure the web-component file is
   // properly loaded
   static LoadedCustomComponent: boolean = DiffsContainerLoaded;
@@ -412,7 +425,7 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
   protected errorWrapper: HTMLElement | undefined;
   protected placeHolder: HTMLElement | undefined;
 
-  protected hunksRenderer: DiffHunksRenderer<LAnnotation>;
+  protected hunksRenderer: DiffHunksRenderer<LAnnotation, LDecoration>;
   protected resizeManager: ResizeManager;
   protected scrollSyncManager: ScrollSyncManager;
   protected interactionManager: InteractionManager<'diff'>;
@@ -420,6 +433,7 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
   protected annotationCache: Map<string, AnnotationElementCache<LAnnotation>> =
     new Map();
   protected lineAnnotations: DiffLineAnnotation<LAnnotation>[] = [];
+  protected decorations: DiffDecorationItem<LDecoration>[] = [];
   protected managersDirty = false;
 
   protected deletionFile?: FileContents | null;
@@ -450,7 +464,7 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
   protected deferredEditorActiveLine: DeferredEditorActiveLineWrite | undefined;
 
   constructor(
-    public options: FileDiffOptions<LAnnotation, Caret> = {
+    public options: FileDiffOptions<LAnnotation, LDecoration, Caret> = {
       theme: DEFAULT_THEMES,
     },
     protected workerManager?: WorkerPoolManager | undefined,
@@ -488,15 +502,15 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
   }
 
   protected getHunksRendererOptions(
-    options: FileDiffOptions<LAnnotation, Caret>
+    options: FileDiffOptions<LAnnotation, LDecoration, Caret>
   ): DiffHunksRendererOptions {
     return getDiffHunksRendererOptions(options);
   }
 
   protected createHunksRenderer(
-    options: FileDiffOptions<LAnnotation, Caret>
-  ): DiffHunksRenderer<LAnnotation> {
-    return new DiffHunksRenderer<LAnnotation>(
+    options: FileDiffOptions<LAnnotation, LDecoration, Caret>
+  ): DiffHunksRenderer<LAnnotation, LDecoration> {
+    return new DiffHunksRenderer<LAnnotation, LDecoration>(
       this.getHunksRendererOptions(options),
       this.getAnnotationSlotName,
       this.handleHighlightRender,
@@ -611,7 +625,7 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
   //   those that live on the Hunk class, and it's a bit of an issue with passing
   //   settings down and mirroring them (not great...)
   public setOptions(
-    options: FileDiffOptions<LAnnotation, Caret> | undefined
+    options: FileDiffOptions<LAnnotation, LDecoration, Caret> | undefined
   ): void {
     if (options == null) return;
     this.options = options;
@@ -635,7 +649,7 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
   }
 
   private mergeOptions(
-    options: Partial<FileDiffOptions<LAnnotation, Caret>>
+    options: Partial<FileDiffOptions<LAnnotation, LDecoration, Caret>>
   ): void {
     this.options = { ...this.options, ...options };
   }
@@ -764,7 +778,9 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
     this.renderAnnotations();
     return true;
   }
-
+  public setDecorations(decorations: DiffDecorationItem<LDecoration>[]): void {
+    this.decorations = decorations;
+  }
   private canPartiallyRender(
     forceRender: boolean,
     annotationsChanged: boolean,
@@ -980,9 +996,10 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
     prerenderedHTML,
     preventEmit = false,
     lineAnnotations,
+    decorations,
     fileDiff,
     ...fileInputProps
-  }: FileDiffHydrationProps<LAnnotation>): void {
+  }: FileDiffHydrationProps<LAnnotation, LDecoration>): void {
     if (!this.enabled) {
       throw new Error(
         'FileDiff.hydrate: attempting to call hydrate after cleaned up'
@@ -1018,6 +1035,7 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
         ...fileInputProps,
         fileContainer,
         lineAnnotations,
+        decorations,
         fileDiff,
         forceRender: forceEditorRender || fileInputProps.forceRender,
         preventEmit: true,
@@ -1028,6 +1046,7 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
       this.hydrationSetup({
         fileDiff,
         lineAnnotations,
+        decorations,
         ...fileInput,
       });
     }
@@ -1106,10 +1125,12 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
     oldFile,
     newFile,
     lineAnnotations,
-  }: HydrationSetup<LAnnotation>): void {
+    decorations,
+  }: HydrationSetup<LAnnotation, LDecoration>): void {
     // It's possible we are hydrating a pure-rename and therefore there will be
     // no pre element
     this.lineAnnotations = lineAnnotations ?? this.lineAnnotations;
+    this.decorations = decorations ?? this.decorations;
     this.additionFile = newFile;
     this.deletionFile = oldFile;
     this.fileDiff =
@@ -1123,6 +1144,7 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
     }
 
     this.syncInteractionOptions();
+    this.hunksRenderer.setDecorations(this.decorations);
     this.hunksRenderer.hydrate(this.fileDiff);
     this.renderedDiff = this.fileDiff;
     // FIXME(amadeus): not sure how to handle this yet...
@@ -1415,11 +1437,12 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
     forceRender = false,
     preventEmit = false,
     lineAnnotations,
+    decorations,
     fileContainer,
     containerWrapper,
     renderRange,
     ...fileInputProps
-  }: FileDiffRenderProps<LAnnotation>): boolean {
+  }: FileDiffRenderProps<LAnnotation, LDecoration>): boolean {
     if (!this.enabled) {
       // NOTE(amadeus): May need to be a silent failure? Making it loud for now
       // to better understand it
@@ -1444,6 +1467,7 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
     const nextRenderRange = collapsed ? undefined : renderRange;
     const themeChanged = this.hasThemeChanged();
     const hasFileInput = fileInput != null;
+    const nextDecorations = decorations;
     const filesDidChange =
       hasFileInput &&
       (!areOptionalFilesEqual(oldFile, this.deletionFile) ||
@@ -1455,13 +1479,18 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
       (lineAnnotations.length > 0 || this.getLatestAnnotations().length > 0)
         ? this.isNewAnnotations(lineAnnotations)
         : false;
-
+    const decorationsChanged =
+      nextDecorations != null &&
+      (nextDecorations.length > 0 || this.decorations.length > 0)
+        ? nextDecorations !== this.decorations
+        : false;
     if (
       !collapsed &&
       areRenderRangesEqual(nextRenderRange, this.renderRange) &&
       !forceRender &&
       !annotationsChanged &&
       !themeChanged &&
+      !decorationsChanged &&
       // If using the fileDiff API, lets check to see if they are equal to
       // avoid doing work
       ((fileDiff != null && !diffDidChange) ||
@@ -1518,6 +1547,9 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
     }
 
     const latestDiff = this.getLatestDiff();
+    if (nextDecorations != null) {
+      this.decorations = nextDecorations;
+    }
     if (latestDiff == null) {
       return false;
     }
@@ -1538,7 +1570,7 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
     this.syncInteractionOptions();
 
     this.hunksRenderer.setLineAnnotations(this.getLatestAnnotations());
-
+    this.hunksRenderer.setDecorations(this.decorations);
     const { disableErrorHandling = false, disableFileHeader = false } =
       this.options;
 
@@ -1607,7 +1639,7 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
       const didPartiallyRender =
         this.canPartiallyRender(
           forceRender,
-          annotationsChanged,
+          annotationsChanged || decorationsChanged,
           filesDidChange ||
             diffDidChange ||
             themeChanged ||
