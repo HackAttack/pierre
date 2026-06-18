@@ -7,6 +7,7 @@ import type {
   FileContents,
   FileDiffMetadata,
   Hunk,
+  HunkExpansionRegion,
   HunkSeparators,
   NumericScrollLineAnchor,
   PendingCodeViewLayoutReset,
@@ -1124,6 +1125,10 @@ export class VirtualizedFileDiff<
     // CodeView sessions retain their editor association while rendering is
     // suspended; CodeView itself runs the exit recompute when it reaps one.
     return !this.isAdvancedMode() && super.shouldSelfHealEditSession();
+  }
+
+  public getExpandedHunksForSearch(): Map<number, HunkExpansionRegion> {
+    return this.hunksRenderer.getExpandedHunksMap();
   }
 
   public setVisibility(visible: boolean): void {
