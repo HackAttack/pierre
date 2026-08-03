@@ -65,26 +65,36 @@ function handleStorage(event: StorageEvent): void {
   if (event.key == null || event.key === GITHUB_TOKEN_STORAGE_KEY) {
     const auth = readStoredAuth();
     if (!isSameStoredGitHubAuth(getSnapshot().auth, auth)) {
-      updateAuth(auth);
+      updateAuth(
+        auth,
+        auth?.token !== getSnapshot().auth?.token ||
+          auth?.savedAt !== getSnapshot().auth?.savedAt
+      );
     }
   }
 }
 
-function updateAuth(auth: StoredGitHubAuth | undefined): void {
-  snapshot = { auth, tokenVersion: getSnapshot().tokenVersion + 1 };
+// Capability-only sync updates posting UI without refetching every loader.
+// Explicit saves still refresh loaders, including a repeated token string.
+function updateAuth(
+  auth: StoredGitHubAuth | undefined,
+  refreshToken = true
+): void {
+  snapshot = {
+    auth,
+    tokenVersion: getSnapshot().tokenVersion + (refreshToken ? 1 : 0),
+  };
   for (const listener of listeners) {
     listener();
   }
 }
 
-function setToken(
-  nextToken: string,
-  capability: GitHubTokenCapability
-): void {
+function setToken(nextToken: string, capability: GitHubTokenCapability): void {
   const token = nextToken.trim();
-  const auth = token === ''
-    ? undefined
-    : { capability, savedAt: new Date().toISOString(), token };
+  const auth =
+    token === ''
+      ? undefined
+      : { capability, savedAt: new Date().toISOString(), token };
   updateAuth(auth);
   writeStoredAuth(auth);
 }
@@ -133,6 +143,5 @@ function writeStoredAuth(auth: StoredGitHubAuth | undefined): void {
     }
   } catch {
     // Browsers can disable storage; in-memory state still works for the page.
-
   }
 }

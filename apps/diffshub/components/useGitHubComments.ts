@@ -7,16 +7,18 @@ import {
   type RefObject,
   type SetStateAction,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
 
+import { useOnValueChange } from './useOnValueChange';
 import { classifyCommentLineType } from '@/lib/classifyCommentLineType';
 import {
   type GitHubCommentsPayload,
   type GitHubCommentThread,
-  type GitHubCommentWire,
   groupGitHubCommentThreads,
+  isGitHubCommentWire,
   mapGitHubCommentSide,
 } from '@/lib/githubComments';
 import type {
@@ -39,7 +41,7 @@ interface UseGitHubCommentsOptions {
   setCommentSections: Dispatch<SetStateAction<DiffsHubSavedCommentItem[]>>;
   tokenVersion: number;
   treeSource: DiffsHubFileTreeSource | null;
-  viewerRef: RefObject<CodeViewHandle<CommentMetadata> | null>;
+  viewerRef: RefObject<CodeViewHandle<CommentMetadata, undefined> | null>;
 }
 
 interface UseGitHubCommentsResult {
@@ -82,9 +84,21 @@ export function useGitHubComments({
   // threads disappeared.
   const annotatedItemIdsRef = useRef<ReadonlySet<string>>(new Set());
 
+  // Clear results when their request inputs change, before the new view commits.
+  const requestKey = useMemo(
+    () => ({ domain, getToken, path, tokenVersion }),
+    [domain, getToken, path, tokenVersion]
+  );
+  useOnValueChange(
+    requestKey,
+    () => {
+      setPayload(undefined);
+      setCommentsError(undefined);
+    },
+    requestKey
+  );
+
   useEffect(() => {
-    setPayload(undefined);
-    setCommentsError(undefined);
     // Non-GitHub sources (tangled.org etc.) have no GitHub comments and must
     // never see the PAT, mirroring the patch loader's domain gate.
     if (domain != null) {
@@ -166,7 +180,7 @@ function mapGitHubThreads(
   threads: readonly GitHubCommentThread[],
   pathToItemId: ReadonlyMap<string, string>,
   commentFileByItemId: DiffsHubCommentFileByItemId | null,
-  viewer: CodeViewHandle<CommentMetadata> | null
+  viewer: CodeViewHandle<CommentMetadata, undefined> | null
 ): MappedGitHubThreadView {
   interface SectionAccumulator {
     comments: DiffsHubSavedCommentEntry[];
@@ -210,8 +224,8 @@ function mapGitHubThreads(
     const key = `gh-${root.id}`;
     const side = mapGitHubCommentSide(root.side);
     const shared = {
-      author: root.author.login,
-      avatarUrl: root.author.avatarUrl,
+      author: root.user.login,
+      avatarUrl: root.user.avatarUrl,
       itemId,
       key,
       message: root.body,
@@ -293,7 +307,7 @@ function mapGitHubThreads(
 // GitHub annotations in the previous apply but not in this one are cleared.
 // Returns the item ids that now carry GitHub annotations.
 function applyGitHubAnnotations(
-  viewer: CodeViewHandle<CommentMetadata>,
+  viewer: CodeViewHandle<CommentMetadata, undefined>,
   annotationsByItemId: ReadonlyMap<
     string,
     DiffLineAnnotation<CommentMetadata>[]
@@ -312,7 +326,7 @@ function applyGitHubAnnotations(
 }
 
 function setGitHubAnnotationsOnItem(
-  viewer: CodeViewHandle<CommentMetadata>,
+  viewer: CodeViewHandle<CommentMetadata, undefined>,
   itemId: string,
   annotations: readonly DiffLineAnnotation<CommentMetadata>[] | undefined
 ): void {
@@ -361,24 +375,10 @@ function normalizeCommentsPayload(data: unknown): GitHubCommentsPayload {
     throw new Error('DiffsHub GitHub comments response was malformed.');
   }
   return {
-    comments: data.comments.filter(isWireComment),
+    comments: data.comments.filter(isGitHubCommentWire),
     headSha: typeof data.headSha === 'string' ? data.headSha : undefined,
     truncated: data.truncated === true,
   };
-}
-
-// The payload comes from our own same-origin route, so this only guards the
-// fields the mapping above dereferences rather than re-validating every
-// property the server already normalized.
-function isWireComment(value: unknown): value is GitHubCommentWire {
-  return (
-    isRecord(value) &&
-    typeof value.id === 'number' &&
-    typeof value.path === 'string' &&
-    typeof value.body === 'string' &&
-    isRecord(value.author) &&
-    typeof value.author.login === 'string'
-  );
 }
 
 function createCommentsRequestInit(
