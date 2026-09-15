@@ -149,8 +149,10 @@ export class VirtualizedFileDiff<
   private currentCollapsed: boolean | undefined;
   private pendingHydratedDiff: PendingLoadedDiff | undefined;
   private pendingExpansions: PendingExpansion[] | undefined;
-  // CodeView calculates the next layout before its DOM pass. Keep that
-  // selection separate from renderedDiff until render() applies it.
+  // Remember which diff the layout was calculated from, even when only a
+  // placeholder is rendered. Async highlighting clears this through rerender()
+  // so layout can use the newly available content. CodeView updates it during
+  // its layout pass.
   private pendingRender: PendingRender | undefined;
 
   constructor(
@@ -411,7 +413,10 @@ export class VirtualizedFileDiff<
       cache: { ghostTextRowsByIndex },
       metrics: { lineHeight },
     } = this;
-    const fileDiff = this.getRenderedDiff();
+    // A placeholder may have a prepared layout before any content has
+    // rendered.
+    const fileDiff =
+      this.placeHolder != null ? this.getLayoutDiff() : this.getRenderedDiff();
     if (this.fileContainer == null || fileDiff == null) {
       if (this.height !== 0) {
         hasHeightChange = true;
@@ -425,17 +430,17 @@ export class VirtualizedFileDiff<
       this.editor?.__getGhostTextRows() ?? NO_GHOST_TEXT_ROWS
     );
     const lineAnnotations = this.getLatestAnnotations();
-    // NOTE(amadeus): We can probably be a lot smarter about this, and we
-    // should be thinking about ways to improve this
-    // If the file has no annotations and we are using the scroll variant, then
-    // we can probably skip everything
+    // Ghost-row changes affect placeholders too, but placeholders have no DOM
+    // rows to measure. Unwrapped rows without annotations also need no measurement.
     if (
-      overflow === 'scroll' &&
-      lineAnnotations.length === 0 &&
-      !this.isResizeDebuggingEnabled()
+      this.placeHolder != null ||
+      (overflow === 'scroll' &&
+        lineAnnotations.length === 0 &&
+        !this.isResizeDebuggingEnabled())
     ) {
       if (hasHeightChange) {
         this.computeApproximateSize(true);
+        this.setPlaceholderHeight(this.height);
       }
       return hasHeightChange;
     }
@@ -1414,7 +1419,7 @@ export class VirtualizedFileDiff<
           pendingRenderDiff: this.pendingRender.diff,
           layoutDiffChanged: false,
           renderedDiffChanged: false,
-          annotationsChanged: false,
+          annotationsChanged: this.syncLineAnnotations(lineAnnotations),
         };
       }
       return this.updatePendingRender(nextFileDiff, lineAnnotations);
@@ -1447,7 +1452,7 @@ export class VirtualizedFileDiff<
       this.isSetup = true;
     } else {
       this.top ??= this.getVirtualizedTop();
-      if (layoutDiffChanged) {
+      if (this.layoutDirty && this.isSimpleMode()) {
         this.getSimpleVirtualizer()?.markDOMDirty();
         this.computeApproximateSize(false, pendingRenderDiff);
       }
@@ -1461,7 +1466,6 @@ export class VirtualizedFileDiff<
       if (targetChanged) {
         this.clearReusableHeader();
       }
-      this.pendingRender = undefined;
       return this.renderPlaceholder(this.height);
     }
 

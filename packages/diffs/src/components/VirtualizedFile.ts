@@ -91,6 +91,10 @@ export class VirtualizedFile<
     fileAnnotationHeight: 0,
     ghostTextRows: NO_GHOST_TEXT_ROWS,
   };
+  // Remember which file the layout was calculated from, even when only a
+  // placeholder is rendered. Async highlighting clears this through rerender()
+  // so layout can use the newly available content. CodeView updates it during
+  // its layout pass.
   private pendingRender: PendingRender | undefined;
   private isVisible: boolean = false;
   private isSetup: boolean = false;
@@ -299,16 +303,17 @@ export class VirtualizedFile<
       this.editor?.__getGhostTextRows() ?? NO_GHOST_TEXT_ROWS;
     hasHeightChange = this.applyGhostTextRows(ghostTextRows);
 
-    // If the file has no annotations and we are using the scroll variant, every
-    // line is one line height tall apart from those with ghost text under them,
-    // so nothing needs measuring.
+    // Ghost-row changes affect placeholders too, but placeholders have no DOM
+    // rows to measure. Unwrapped rows without annotations also need no measurement.
     if (
-      overflow === 'scroll' &&
-      this.getLatestAnnotations().length === 0 &&
-      !this.isResizeDebuggingEnabled()
+      this.placeHolder != null ||
+      (overflow === 'scroll' &&
+        this.getLatestAnnotations().length === 0 &&
+        !this.isResizeDebuggingEnabled())
     ) {
       if (hasHeightChange) {
         this.computeApproximateSize(true);
+        this.setPlaceholderHeight(this.height);
       }
       return hasHeightChange;
     }
@@ -858,7 +863,7 @@ export class VirtualizedFile<
           pendingRenderFile: this.pendingRender.file,
           layoutFileChanged: false,
           renderedFileChanged: false,
-          annotationsChanged: false,
+          annotationsChanged: this.syncLineAnnotations(lineAnnotations),
         };
       }
       return this.updatePendingRender(file, lineAnnotations);
@@ -892,9 +897,8 @@ export class VirtualizedFile<
       this.isSetup = true;
     } else {
       this.top ??= this.getVirtualizedTop();
-      if (layoutFileChanged && this.isSimpleMode()) {
+      if (this.layoutDirty && this.isSimpleMode()) {
         this.getSimpleVirtualizer()?.markDOMDirty();
-        this.resetLayoutCache(false);
         this.computeApproximateSize(false, pendingRenderFile);
       }
     }
@@ -907,7 +911,6 @@ export class VirtualizedFile<
       this.isSimpleMode() &&
       (!didFileChange || !isSetup)
     ) {
-      this.pendingRender = undefined;
       return this.renderPlaceholder(this.height);
     }
 
