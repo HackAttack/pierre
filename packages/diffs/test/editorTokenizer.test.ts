@@ -13,6 +13,7 @@ import {
 import { EditorTokenizer, renderLineTokens } from '../src/editor/tokenizer';
 import type { TextEdit } from '../src/editor/types';
 import { createDiffsHighlighter } from '../src/highlighter/highlights';
+import { createDiffsHighlighter as createShikiHighlighter } from '../src/highlighter/shiki-js';
 import type {
   BaseCodeOptions,
   DiffsHighlighter,
@@ -551,6 +552,33 @@ describe('EditorTokenizer', () => {
     instance.tokenizer.cleanUp();
     await Bun.sleep(20);
     expect(instance.deferred.size).toBe(0);
+  });
+
+  test('preserves distinct focused and other search-match colors from Shiki', async () => {
+    const highlighter = await createShikiHighlighter();
+    const theme = {
+      name: 'search-match-colors',
+      type: 'dark',
+      colors: {
+        'editor.findMatchBackground': '#ff0000',
+        'editor.findMatchHighlightBackground': '#00ff00',
+      },
+      tokenColors: [],
+    };
+    highlighter.themeResolver.seedResolvedTheme(theme.name, theme);
+    let style = '';
+    const tokenizer = new EditorTokenizer({
+      highlighter,
+      textDocument: new TextDocument('test.txt', 'match match', 'text'),
+      codeOptions: { theme: theme.name },
+      setStyle: (value) => {
+        style = value;
+      },
+      onDeferTokenize: () => {},
+    });
+    tokenizers.push(tokenizer);
+    expect(style).toContain('--diffs-editor-match-bg: #ff0000;');
+    expect(style).toContain('--diffs-editor-match-highlight-bg: #00ff00;');
   });
 
   test('theme swaps update styles and deferred colors once', async () => {

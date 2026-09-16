@@ -223,7 +223,9 @@ export class FileStream {
             }
             offset += consumed;
             pending = pending.slice(consumed);
-            provisional = pending !== '';
+            // A lone CR may still become CRLF; rendering it would advance the
+            // current row before the next chunk recalls the provisional token.
+            provisional = pending !== '' && pending !== '\r';
             // Keep new chunks visible while the native tokenizer retains the
             // unfinished line. Completed lines replace this provisional text.
             if (provisional) controller.enqueue({ content: pending, offset });

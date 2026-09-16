@@ -884,14 +884,7 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
   public async initializeHighlighter(
     options: Parameters<typeof getSharedHighlighter>[0] = {
       ...getHighlighterOptions(this.getEffectiveCodeOptions()),
-      langs:
-        this.diff == null
-          ? []
-          : [
-              this.diff.lang ?? getFiletypeFromFileName(this.diff.name),
-              this.diff.lang ??
-                getFiletypeFromFileName(this.diff.prevName ?? this.diff.name),
-            ],
+      langs: this.diff == null ? [] : getDiffLanguages(this.diff),
     }
   ): Promise<DiffsHighlighter> {
     this.highlighter = await getSharedHighlighter(options);
@@ -1066,10 +1059,7 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
       getHighlighterIfLoaded({
         theme: options.theme ?? DEFAULT_THEMES,
         preferredHighlighter: options.preferredHighlighter,
-        langs: [
-          diff.lang ?? getFiletypeFromFileName(diff.name),
-          diff.lang ?? getFiletypeFromFileName(diff.prevName ?? diff.name),
-        ],
+        langs: getDiffLanguages(diff),
       }) != null
     );
   }
@@ -1172,12 +1162,7 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
       this.highlighter = getHighlighterIfLoaded({
         theme: options.theme ?? DEFAULT_THEMES,
         preferredHighlighter: options.preferredHighlighter,
-        langs: forcePlainText
-          ? []
-          : [
-              diff.lang ?? getFiletypeFromFileName(diff.name),
-              diff.lang ?? getFiletypeFromFileName(diff.prevName ?? diff.name),
-            ],
+        langs: forcePlainText ? [] : getDiffLanguages(diff),
       });
       const canHighlight = !forcePlainText;
 
@@ -1256,12 +1241,7 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
     const { options } = this.getRenderOptions(diff);
     const highlighter = await this.initializeHighlighter({
       ...getHighlighterOptions(options),
-      langs: forcePlainText
-        ? []
-        : [
-            diff.lang ?? getFiletypeFromFileName(diff.name),
-            diff.lang ?? getFiletypeFromFileName(diff.prevName ?? diff.name),
-          ],
+      langs: forcePlainText ? [] : getDiffLanguages(diff),
     });
     return this.renderDiffWithHighlighter(
       diff,
@@ -2615,6 +2595,16 @@ function getEditorDocumentLines<LAnnotation>(
     lines.push(textDocument.getLineText(line, true));
   }
   return lines;
+}
+
+// Renames may need both languages; load each only once across renderer paths.
+function getDiffLanguages(diff: FileDiffMetadata): string[] {
+  if (diff.lang != null) return [diff.lang];
+  const additionLang = getFiletypeFromFileName(diff.name);
+  const deletionLang = getFiletypeFromFileName(diff.prevName ?? diff.name);
+  return additionLang === deletionLang
+    ? [additionLang]
+    : [additionLang, deletionLang];
 }
 
 function isDiffMassive(

@@ -279,6 +279,29 @@ describe('FileStream', () => {
     'shiki-wasm',
     'shiki-js',
   ] as const) {
+    test.each(['\nlast', 'last', ''])(
+      `buffers a standalone CR before %j with ${preferredHighlighter}`,
+      async (suffix) => {
+        const stream = await create(preferredHighlighter);
+        stream.controller.enqueue('first\n\r');
+        await waitUntil(() => stream.content() != null);
+        expect(stream.content()?.textContent).toBe('first\n');
+        expect(stream.content()?.querySelectorAll('[data-line]')).toHaveLength(
+          2
+        );
+
+        if (suffix !== '') stream.controller.enqueue(suffix);
+        stream.controller.close();
+        const code = 'first\n\r' + suffix;
+        await waitUntil(
+          () => stream.closed && stream.content()?.textContent === code
+        );
+        expect(stream.content()?.querySelectorAll('[data-line]')).toHaveLength(
+          code.split(/\r\n|\r|\n/).length
+        );
+      }
+    );
+
     test(`preserves CR-only stream rows with ${preferredHighlighter}`, async () => {
       const stream = await create(preferredHighlighter);
       stream.controller.enqueue('/* first\r');

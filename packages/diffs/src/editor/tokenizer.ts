@@ -222,7 +222,7 @@ export class EditorTokenizer {
       --diffs-editor-line-highlight-border: ${lineHighlightBorder};
       --diffs-editor-active-line-source-mix: ${lineHighlightBackground == null ? '100%' : '85%'};
       --diffs-editor-match-bg: ${colors['search.match_background'] ?? 'initial'};
-      --diffs-editor-match-highlight-bg: ${colors['search.match_background'] ?? 'initial'};
+      --diffs-editor-match-highlight-bg: ${colors['search.match_highlight_background'] ?? colors['search.match_background'] ?? 'initial'};
       --diffs-editor-bracket-match-bg: ${colors['editor.document_highlight.bracket_background'] ?? 'initial'};
       --diffs-editor-bracket-match-border: ${typeof colors['editor.document_highlight.bracket_border'] === 'string' ? colors['editor.document_highlight.bracket_border'] : 'initial'};
       --diffs-editor-cursor-fg: ${player?.cursor ?? 'initial'};

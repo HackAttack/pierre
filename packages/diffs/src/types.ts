@@ -100,6 +100,7 @@ export interface DiffsThemeStyle {
   'editor.document_highlight.bracket_background'?: string;
   'editor.document_highlight.bracket_border'?: string;
   'search.match_background'?: string;
+  'search.match_highlight_background'?: string;
   players?: readonly { cursor?: string; selection?: string }[];
   error?: string;
   warning?: string;

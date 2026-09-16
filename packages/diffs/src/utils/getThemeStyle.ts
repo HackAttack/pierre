@@ -25,6 +25,8 @@ export function getThemeStyle(raw: DiffsTheme): DiffsThemeStyle {
     'editor.active_line.background': colors['editor.lineHighlightBackground'],
     'editor.active_line.border': colors['editor.lineHighlightBorder'],
     'search.match_background': colors['editor.findMatchBackground'],
+    'search.match_highlight_background':
+      colors['editor.findMatchHighlightBackground'],
     'editor.document_highlight.bracket_background':
       colors['editorBracketMatch.background'],
     'editor.document_highlight.bracket_border':
