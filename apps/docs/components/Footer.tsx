@@ -30,9 +30,9 @@ export default function Footer() {
                 <Link href="/" className={linkClass}>
                   Home
                 </Link>
-                <Link href="/highlights" className={linkClass}>
+                {/* <Link href="/highlights" className={linkClass}>
                   Highlights
-                </Link>
+                </Link> */}
                 <Link href="/edit" className={linkClass}>
                   Edit
                 </Link>
