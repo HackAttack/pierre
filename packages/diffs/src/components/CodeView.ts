@@ -1231,7 +1231,7 @@ export class CodeView<LAnnotation = undefined, Caret = undefined> {
     this.root.addEventListener('pointerdown', this.clearPendingScroll, {
       passive: true,
     });
-    this.root.addEventListener('keydown', this.handleSearchKeyDown);
+    this.root.addEventListener('keydown', this.handleSearchKeyDown, true);
     this.root.addEventListener('keydown', this.clearPendingScroll, {
       passive: true,
     });
@@ -1352,7 +1352,7 @@ export class CodeView<LAnnotation = undefined, Caret = undefined> {
     this.root?.removeEventListener('wheel', this.clearPendingScroll);
     this.root?.removeEventListener('touchstart', this.clearPendingScroll);
     this.root?.removeEventListener('pointerdown', this.clearPendingScroll);
-    this.root?.removeEventListener('keydown', this.handleSearchKeyDown);
+    this.root?.removeEventListener('keydown', this.handleSearchKeyDown, true);
     this.root?.removeEventListener('keydown', this.clearPendingScroll);
     this.root?.style.removeProperty('overflow-anchor');
     this.container?.remove();
@@ -4257,13 +4257,17 @@ export class CodeView<LAnnotation = undefined, Caret = undefined> {
     this.scrollAnimation = undefined;
   };
 
+  // Capture search shortcuts before child editors so finding an offscreen
+  // match uses CodeView's line scrolling instead of the editor's caret
+  // scrolling.
   private handleSearchKeyDown = (event: KeyboardEvent): void => {
-    if (event.defaultPrevented) {
+    if (event.defaultPrevented || event.isComposing || event.keyCode === 229) {
       return;
     }
 
     if (event.key === 'Escape' && this.searchPanel !== undefined) {
       event.preventDefault();
+      event.stopPropagation();
       this.closeSearchPanel();
       return;
     }
@@ -4272,6 +4276,7 @@ export class CodeView<LAnnotation = undefined, Caret = undefined> {
       const findAgain = resolveFindAgainShortcut(event);
       if (findAgain !== undefined) {
         event.preventDefault();
+        event.stopPropagation();
         this.searchPanel.navigate(findAgain === 'previous');
         return;
       }
@@ -4283,6 +4288,7 @@ export class CodeView<LAnnotation = undefined, Caret = undefined> {
     ) {
       // Prevent the browser find UI and open CodeView's find-only panel.
       event.preventDefault();
+      event.stopPropagation();
       this.openSearchPanel();
       this.searchPanel?.setMode(event.altKey ? 'replace' : 'find');
     }
