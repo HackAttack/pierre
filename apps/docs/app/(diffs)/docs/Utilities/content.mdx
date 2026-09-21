@@ -129,9 +129,19 @@ highlighting with no async loading delay.
 
 ### registerCustomTheme [toc-ignore]
 
-Register a custom TextMate theme for use with either Shiki backend. Use
-`registerCustomZedTheme` for Highlights. The theme name you register must match
-the `name` field inside your theme JSON file.
+Register a lazy loader for a TextMate theme, a Zed-compatible Highlights `Theme`
+or `ThemeFamily`, or a portable `DiffsTheme`. The loader can return the theme
+directly or as a module's `default` export.
+
+TextMate themes use either Shiki backend, and their `name` must match the
+registered name. Zed themes use `preferredHighlighter: 'highlights'`; the
+registered name replaces their display name. A Zed family uses its first theme;
+return a specific member from the loader to select another.
+
+Register one loader per name. Raw TextMate themes require Shiki, and raw Zed
+themes require Highlights. To support every backend with one theme, use
+`createCSSVariablesTheme` or a `DiffsTheme` containing both a normalized
+`textmate` palette and a `zed` palette.
 
 <DocsCodeExample {...registerCustomTheme} />
 

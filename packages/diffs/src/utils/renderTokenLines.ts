@@ -116,9 +116,17 @@ export function renderTokenLines(
       children: [],
     };
     const spans = decorationsByLine.get(lineIndex) ?? [];
+    // Open outer ranges first, regardless of their order in the input.
+    if (spans.length > 1)
+      spans.sort((a, b) => {
+        if (a.start.line !== b.start.line) return a.start.line - b.start.line;
+        if (a.start.character !== b.start.character)
+          return a.start.character - b.start.character;
+        if (a.end.line !== b.end.line) return b.end.line - a.end.line;
+        return b.end.character - a.end.character;
+      });
     let column = 0;
-    let previousDecoration: LineDecoration | undefined;
-    let decorationNode: Element | undefined;
+    const decorationStack: { decoration: LineDecoration; node: Element }[] = [];
     for (const token of normalized) {
       if (token.content === '') continue;
       const start = column;
@@ -144,11 +152,6 @@ export function renderTokenLines(
         const from = boundaries[i - 1];
         const to = boundaries[i];
         if (from === to) continue;
-        const decoration = spans.find(
-          (span) =>
-            (span.start.line < lineIndex || span.start.character <= from) &&
-            (span.end.line > lineIndex || span.end.character >= to)
-        );
         const node: Element = {
           type: 'element',
           tagName: 'span',
@@ -164,21 +167,30 @@ export function renderTokenLines(
             },
           ],
         };
-        if (decoration != null) {
-          if (previousDecoration !== decoration) {
-            decorationNode = {
+        let parent = line;
+        let depth = 0;
+        for (const decoration of spans) {
+          if (
+            (decoration.start.line === lineIndex &&
+              decoration.start.character > from) ||
+            (decoration.end.line === lineIndex && decoration.end.character < to)
+          )
+            continue;
+          if (decorationStack[depth]?.decoration !== decoration) {
+            decorationStack.length = depth;
+            const wrapper: Element = {
               type: 'element',
               tagName: 'span',
               properties: { ...decoration.properties },
               children: [],
             };
-            line.children.push(decorationNode);
+            parent.children.push(wrapper);
+            decorationStack.push({ decoration, node: wrapper });
           }
-          decorationNode?.children.push(node);
-        } else {
-          line.children.push(node);
+          parent = decorationStack[depth++].node;
         }
-        previousDecoration = decoration;
+        decorationStack.length = depth;
+        parent.children.push(node);
       }
       column = end;
     }

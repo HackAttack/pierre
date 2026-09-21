@@ -81,8 +81,15 @@ export class HighlightsLiveTokenizer implements DiffsLiveTokenizer {
       lines = new Map();
       this.#readLines(lines, returnedStart, end);
     }
-    // A host that does not move existing rows needs tokens for the shifted suffix.
-    if (change.lineDelta !== 0 && !hostRealignsRows) {
+    // Balanced insert/delete batches shift rows without triggering host realignment.
+    // Other structural edits need the suffix only when the host does not move rows.
+    if (
+      change.lineDelta === 0
+        ? (change.changedLineChanges?.some(
+            ([, , lineDelta]) => lineDelta !== 0
+          ) ?? false)
+        : !hostRealignsRows
+    ) {
       this.#readLines(lines, returnedStart, end);
     }
     return lines;

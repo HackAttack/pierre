@@ -175,9 +175,8 @@ export const HELPER_REGISTER_CUSTOM_THEME: PreloadFileOptions<
     name: 'registerCustomTheme.ts',
     contents: `import { registerCustomTheme } from '@pierre/diffs';
 
-// Register a custom Shiki theme before using it.
-// The theme name you register must match the 'name' field
-// inside your theme JSON file.
+// Register themes before rendering.
+// TextMate themes must have a matching 'name' field.
 
 // Option 1: Dynamic import (recommended for code splitting)
 registerCustomTheme('my-custom-theme', () => import('./my-theme.json'));
@@ -200,8 +199,12 @@ registerCustomTheme('inline-theme', async () => ({
   ],
 }));
 
-// Once registered, use the theme name in your components:
-// <FileDiff options={{ theme: 'my-custom-theme' }} ... />`,
+// Option 3: A Zed-compatible Highlights theme or theme family
+registerCustomTheme('my-zed-theme', () => import('./my-zed-theme.json'));
+
+// Use the registered name and the matching backend:
+// <FileDiff options={{ theme: 'my-custom-theme' }} ... />
+// <FileDiff options={{ theme: 'my-zed-theme', preferredHighlighter: 'highlights' }} ... />`,
   },
   options,
 };

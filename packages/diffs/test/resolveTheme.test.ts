@@ -5,6 +5,8 @@ import { getResolvedThemes } from '../src/highlighter/themes/getResolvedThemes';
 import { hasResolvedThemes } from '../src/highlighter/themes/hasResolvedThemes';
 import { resolveTheme } from '../src/highlighter/themes/resolveTheme';
 import { resolveThemes } from '../src/highlighter/themes/resolveThemes';
+import { customThemes } from '../src/highlighter/themes/themeResolver';
+import type { DiffsTheme } from '../src/highlighter/themes/types';
 
 afterEach(() => {
   cleanUpResolvedThemes();
@@ -94,12 +96,21 @@ describe('backend theme resolution', () => {
     }
   });
 
-  test('keeps TextMate and Zed registrations under the same name separate', async () => {
-    const { registerCustomTheme, registerCustomZedTheme } =
+  test('selects each backend palette from one portable theme registration', async () => {
+    const { normalizeTheme } = await import('shiki/core');
+    const { registerCustomTheme } =
       await import('../src/highlighter/themes/registerCustomTheme');
     const name = 'backend-specific-theme';
-    registerCustomTheme(name, () =>
-      Promise.resolve({
+    const portable: DiffsTheme = {
+      name,
+      type: 'dark',
+      fg: '#ddeeff',
+      bg: '#001122',
+      colors: {
+        'editor.foreground': '#ddeeff',
+        'editor.background': '#001122',
+      },
+      textmate: normalizeTheme({
         name,
         type: 'light',
         colors: {
@@ -107,25 +118,27 @@ describe('backend theme resolution', () => {
           'editor.background': '#ffffff',
         },
         tokenColors: [],
-      })
-    );
-    registerCustomZedTheme(name, () =>
-      Promise.resolve({
-        name: 'Friendly Zed Name',
+      }),
+      zed: {
+        name,
         appearance: 'dark',
         style: { text: '#ddeeff', background: '#001122', created: '#00ff00' },
-      })
-    );
-    const textmate = await resolveTheme(name, 'shiki-js');
-    const zed = await resolveTheme(name, 'highlights');
-    expect(textmate.fg).toBe('#112233');
-    expect(textmate.textmate).toBeDefined();
-    expect(zed.fg).toBe('#ddeeff');
-    expect(zed.zed?.name).toBe(name);
-    expect(zed.colors?.['gitDecoration.addedResourceForeground']).toBe(
-      '#00ff00'
-    );
-    expect(textmate).not.toBe(zed);
+      },
+    };
+    registerCustomTheme(name, () => Promise.resolve(portable));
+    try {
+      const textmate = await resolveTheme(name, 'shiki-js');
+      const zed = await resolveTheme(name, 'highlights');
+      expect(textmate.fg).toBe('#112233');
+      expect(textmate.bg).toBe('#ffffff');
+      expect(textmate.textmate).toBeDefined();
+      expect(zed.fg).toBe('#ddeeff');
+      expect(zed.bg).toBe('#001122');
+      expect(zed.zed?.name).toBe(name);
+      expect(textmate).not.toBe(zed);
+    } finally {
+      customThemes.delete(name);
+    }
   });
 
   test('resolves bundled Highlights themes without a TextMate palette', async () => {
@@ -181,7 +194,7 @@ describe('backend theme resolution', () => {
       })
     );
     expect(resolveTheme('textmate-only-test', 'highlights')).rejects.toThrow(
-      'registerCustomZedTheme'
+      'registerCustomTheme'
     );
   });
 });

@@ -1,4 +1,7 @@
-import type { Theme as ZedTheme } from '@pierre/highlights';
+import type {
+  Theme as ZedTheme,
+  ThemeFamily as ZedThemeFamily,
+} from '@pierre/highlights';
 import {
   createThemeResolver,
   type ThemeLoader,
@@ -10,11 +13,10 @@ import type { HighlighterTypes } from '../../types';
 import { isWorkerContext } from '../../utils/isWorkerContext';
 import type { DiffsTheme } from './types';
 
-export type CustomThemeLoader = ThemeLoader<ThemeRegistration | DiffsTheme>;
-export type CustomZedThemeLoader = ThemeLoader<ZedTheme>;
-
-export const customTextMateThemes: Map<string, CustomThemeLoader> = new Map();
-export const customZedThemes: Map<string, CustomZedThemeLoader> = new Map();
+export type CustomThemeLoader = ThemeLoader<
+  ThemeRegistration | DiffsTheme | ZedTheme | ZedThemeFamily
+>;
+export const customThemes: Map<string, CustomThemeLoader> = new Map();
 const resolvers = new Map<HighlighterTypes, ThemeResolver<DiffsTheme>>();
 
 // Map Zed colors to the VS Code keys used by editor and diff overlays.
@@ -45,8 +47,14 @@ const ZED_COLOR_ALIASES: readonly (readonly [
 
 // Build the shared theme shape from a Zed theme: copy its flat colors, then
 // fill the VS Code keys the surfaces read from their Zed equivalents.
-function createHighlightsTheme(name: string, raw: ZedTheme): DiffsTheme {
-  const zed = { ...raw, name };
+function createHighlightsTheme(
+  name: string,
+  raw: ZedTheme | ZedThemeFamily
+): DiffsTheme {
+  const theme = 'themes' in raw ? raw.themes[0] : raw;
+  if (theme === undefined)
+    throw new Error(`Theme "${name}" is an empty Zed theme family.`);
+  const zed = { ...theme, name };
   const colors: Record<string, string> = {};
   for (const [key, value] of Object.entries(zed.style)) {
     if (typeof value === 'string') colors[key] = value;
@@ -61,6 +69,16 @@ function createHighlightsTheme(name: string, raw: ZedTheme): DiffsTheme {
     if (colors[target] !== undefined) continue;
     const source = sources.find((key) => colors[key] !== undefined);
     if (source !== undefined) colors[target] = colors[source];
+  }
+  if (typeof zed.cssVariables === 'object') {
+    colors['editor.foreground'] ??=
+      colors.text ?? colors.foreground ?? 'foreground';
+    colors['editor.background'] ??= colors.background ?? 'background';
+    const { prefix = '--hls-', defaults } = zed.cssVariables;
+    for (const [key, value] of Object.entries(colors)) {
+      const fallback = defaults?.[value];
+      colors[key] = `var(${prefix}${value}${fallback ? `, ${fallback}` : ''})`;
+    }
   }
   const type = zed.appearance === 'light' ? 'light' : 'dark';
   return {
@@ -94,40 +112,30 @@ export function createDiffsThemeResolver(
         );
       }
       if (backend === 'highlights') {
-        // Custom registrations win over bundled themes, as they do for Shiki:
-        // an explicit Zed registration first, then a portable theme that
-        // carries a Zed palette, then the bundled catalog.
-        const zedLoader = customZedThemes.get(name);
-        const portableLoader = customTextMateThemes.get(name);
-        let zed: ZedTheme | undefined;
-        if (zedLoader !== undefined) {
-          const loaded = await zedLoader();
-          zed = 'default' in loaded ? loaded.default : loaded;
-        } else if (portableLoader !== undefined) {
-          const loaded = await portableLoader();
+        // Custom Zed palettes take precedence over the bundled catalog.
+        const loader = customThemes.get(name);
+        if (loader !== undefined) {
+          const loaded = await loader();
           const theme = 'default' in loaded ? loaded.default : loaded;
           if ('zed' in theme && theme.zed !== undefined) return theme;
+          if ('style' in theme || 'themes' in theme)
+            return createHighlightsTheme(name, theme);
         }
-        if (zed === undefined) {
-          const { themes: bundledHighlightsThemes } =
-            await import('@pierre/highlights/themes/loader');
-          const loader = bundledHighlightsThemes[name];
-          if (loader !== undefined) {
-            const loaded = await loader();
-            zed = 'default' in loaded ? loaded.default : loaded;
-          }
+        const { themes: bundledHighlightsThemes } =
+          await import('@pierre/highlights/themes/loader');
+        const bundledLoader = bundledHighlightsThemes[name];
+        if (bundledLoader !== undefined) {
+          const loaded = await bundledLoader();
+          return createHighlightsTheme(name, loaded.default);
         }
-        if (zed !== undefined) return createHighlightsTheme(name, zed);
-        if (portableLoader !== undefined) {
+        if (loader !== undefined) {
           throw new Error(
-            `Theme "${name}" is a TextMate theme; register a Zed theme with registerCustomZedTheme for Highlights.`
+            `Theme "${name}" is a TextMate theme; use a Zed theme or a portable DiffsTheme with registerCustomTheme for Highlights.`
           );
         }
       } else {
-        const loader = customTextMateThemes.get(name);
-        const { normalizeTheme, createCssVariablesTheme } =
-          await import('shiki/core');
-        let loaded: ThemeRegistration | DiffsTheme;
+        const loader = customThemes.get(name);
+        let loaded: ThemeRegistration | DiffsTheme | ZedTheme | ZedThemeFamily;
         if (loader !== undefined) {
           const result = await loader();
           loaded = 'default' in result ? result.default : result;
@@ -139,6 +147,13 @@ export function createDiffsThemeResolver(
           const result = await descriptor.load();
           loaded = 'default' in result ? result.default : result;
         }
+        if ('style' in loaded || 'themes' in loaded) {
+          throw new Error(
+            `Theme "${name}" is a Zed theme; use preferredHighlighter: 'highlights' or register a TextMate theme for Shiki.`
+          );
+        }
+        const { normalizeTheme, createCssVariablesTheme } =
+          await import('shiki/core');
         if ('cssVariables' in loaded && loaded.cssVariables !== undefined) {
           return {
             ...loaded,

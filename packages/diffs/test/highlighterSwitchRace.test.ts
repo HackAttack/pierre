@@ -13,6 +13,40 @@ import { createDeferred } from './testUtils';
 beforeEach(disposeHighlighter);
 afterEach(disposeHighlighter);
 
+test('diff discards a pending refresh after switching backends', async () => {
+  for (const preferredHighlighter of ['shiki-js', 'highlights'] as const) {
+    await getSharedHighlighter({
+      themes: ['pierre-dark'],
+      langs: ['typescript'],
+      preferredHighlighter,
+    });
+  }
+  const diff = parseDiffFromFile(
+    { name: 'race.ts', contents: 'const before = "old";\n' },
+    { name: 'race.ts', contents: 'const after = "new";\n' }
+  );
+  const options = {
+    theme: 'pierre-dark',
+    preferredHighlighter: 'shiki-js',
+  } as const;
+  const renderer = new DiffHunksRenderer(options);
+  try {
+    const initial = renderer.renderDiff(diff);
+    const refresh = renderer.refreshHighlightedResult();
+    renderer.setOptions({ ...options, preferredHighlighter: 'highlights' });
+    const switched = renderer.renderDiff(diff);
+    const switchedHTML = toHtml(switched?.additionsContentAST ?? []);
+    expect(switchedHTML).toContain('after');
+    expect(switchedHTML).not.toBe(toHtml(initial?.additionsContentAST ?? []));
+
+    await refresh;
+    const refreshed = renderer.renderDiff(diff);
+    expect(toHtml(refreshed?.additionsContentAST ?? [])).toBe(switchedHTML);
+  } finally {
+    renderer.cleanUp();
+  }
+});
+
 for (const kind of ['file', 'diff'] as const) {
   test(`${kind} discards background tokens from a previous backend`, async () => {
     const highlighter = await getSharedHighlighter({

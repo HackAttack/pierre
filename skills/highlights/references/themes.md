@@ -25,6 +25,12 @@ Pass the resolved object as `theme`; a string ID is not accepted. A
 select another. Theme preparation is cached by object identity; create new
 objects when changing values.
 
+For `@pierre/diffs` components, load these objects through
+`registerCustomTheme(name, loader)` and select
+`preferredHighlighter: 'highlights'`. See the
+[custom highlighting recipe](../../diffs/references/recipe-custom-highlighting.md)
+for registration and backend selection.
+
 ## Custom themes
 
 ```ts

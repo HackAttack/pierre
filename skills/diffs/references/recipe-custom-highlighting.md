@@ -1,14 +1,33 @@
 # Recipe: register custom highlighting
 
-Register themes before a surface loads them. TextMate and Zed registrations can
-use the same name so changing backends keeps the component theme option.
+Register themes before a surface loads them. `registerCustomTheme` accepts a
+loader for a TextMate theme, a Zed-compatible Highlights `Theme` or
+`ThemeFamily`, or a portable `DiffsTheme`. Loaders may return the theme directly
+or as a module's `default` export.
+
+For a Zed-compatible theme:
+
+```tsx
+import { registerCustomTheme } from '@pierre/diffs';
+import { FileDiff } from '@pierre/diffs/react';
+
+registerCustomTheme('app-dark', () => import('./my-zed-theme.json'));
+
+<FileDiff
+  oldFile={oldFile}
+  newFile={newFile}
+  options={{ theme: 'app-dark', preferredHighlighter: 'highlights' }}
+/>;
+```
+
+The registered name replaces the Zed theme's display name. A theme family uses
+its first member; return `family.themes[index]` from the loader to select
+another. Raw Zed themes require Highlights and cannot be loaded by Shiki.
+
+For TextMate themes and custom grammars, use Shiki:
 
 ```ts
-import {
-  registerCustomLanguage,
-  registerCustomTheme,
-  registerCustomZedTheme,
-} from '@pierre/diffs';
+import { registerCustomLanguage, registerCustomTheme } from '@pierre/diffs';
 
 registerCustomLanguage(
   'my-language',
@@ -16,14 +35,12 @@ registerCustomLanguage(
   ['myext']
 );
 registerCustomTheme('my-theme', () => import('./my-textmate-theme.json'));
-registerCustomZedTheme('my-theme', () => import('./my-zed-theme.json'));
 ```
 
 Set `file.lang` and `options.theme` to the registered names. Custom languages
-apply to Shiki; Highlights bundles its lexers and ignores custom grammars. Set
-`options.preferredHighlighter` to `'highlights'` to use the Zed palette.
+apply to Shiki; Highlights bundles its lexers and ignores custom grammars.
 
-For a portable CSS palette:
+Register one loader per name. For a palette that works across backends:
 
 ```ts
 import { registerCustomCSSVariableTheme } from '@pierre/diffs';

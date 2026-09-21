@@ -44,22 +44,28 @@ Shiki implementations also expose optional `loadLanguages` and
 backend syntax data: `textmate` for Shiki and `zed` for Highlights. Bundled
 Pierre and Shiki theme names also resolve to bundled Highlights palettes.
 
-| Export                                                                | Purpose                                                                                    |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `registerCustomTheme`                                                 | Registers a TextMate loader or a portable Diffs theme loader.                              |
-| `registerCustomTextMateTheme`                                         | Explicit alias for TextMate registration.                                                  |
-| `registerCustomZedTheme`                                              | Registers a Zed loader for Highlights; may share a name with a TextMate theme.             |
-| `createCSSVariablesTheme`                                             | Creates a portable palette; accepts name, variablePrefix, variableDefaults, and fontStyle. |
-| `registerCustomCSSVariableTheme`                                      | Preserves `(name, variableDefaults, fontStyle = false)` and the `--diffs-` prefix.         |
-| `resolveTheme`, `resolveThemes`                                       | Resolve themes; optional second argument selects the backend.                              |
-| `getResolvedOrResolveTheme`, `getResolvedThemes`, `hasResolvedThemes` | Read or populate the selected backend's cache.                                             |
-| `attachResolvedThemes`                                                | Seeds resolved themes into a highlighter, including worker instances.                      |
-| `areThemesAttached`                                                   | Checks cached themes; optionally takes a backend name or highlighter.                      |
-| `cleanUpResolvedThemes`                                               | Clears caches, preserving registrations.                                                   |
+| Export                                                                | Purpose                                                                                        |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `registerCustomTheme`                                                 | Registers a TextMate, Zed-compatible `Theme` / `ThemeFamily`, or portable `DiffsTheme` loader. |
+| `createCSSVariablesTheme`                                             | Creates a portable palette; accepts name, variablePrefix, variableDefaults, and fontStyle.     |
+| `registerCustomCSSVariableTheme`                                      | Preserves `(name, variableDefaults, fontStyle = false)` and the `--diffs-` prefix.             |
+| `resolveTheme`, `resolveThemes`                                       | Resolve themes; optional second argument selects the backend.                                  |
+| `getResolvedOrResolveTheme`, `getResolvedThemes`, `hasResolvedThemes` | Read or populate the selected backend's cache.                                                 |
+| `attachResolvedThemes`                                                | Seeds resolved themes into a highlighter, including worker instances.                          |
+| `areThemesAttached`                                                   | Checks cached themes; optionally takes a backend name or highlighter.                          |
+| `cleanUpResolvedThemes`                                               | Clears caches, preserving registrations.                                                       |
+
+Loaders return a theme directly or as a module's `default` export. Zed themes
+use the registered name instead of their display name and require
+`preferredHighlighter: 'highlights'`. A `ThemeFamily` uses its first member;
+return `family.themes[index]` from the loader to select another. Raw Zed themes
+cannot resolve on Shiki.
 
 Theme resolution returns portable `DiffsTheme` objects. Resolve on the main
-thread before passing them to workers. Custom TextMate themes require a Zed
-registration when using Highlights; portable CSS palettes work on every backend.
+thread before passing them to workers. Register one loader per name. Raw
+TextMate themes require Shiki. For one theme across backends, use
+`createCSSVariablesTheme` or a `DiffsTheme` containing both `textmate` (Shiki's
+normalized `ThemeRegistrationResolved`) and `zed` palettes.
 
 ## Languages
 

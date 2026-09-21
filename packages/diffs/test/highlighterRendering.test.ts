@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { toHtml } from 'hast-util-to-html';
+import { JSDOM } from 'jsdom';
 
 import {
   DiffHunksRenderer,
@@ -32,6 +33,39 @@ describe('backend rendering', () => {
     'shiki-wasm',
     'highlights',
   ] as const) {
+    test(`${preferredHighlighter} preserves nested decorations across tokens`, async () => {
+      const highlighter = await getSharedHighlighter({
+        preferredHighlighter,
+        themes: ['pierre-dark'],
+        langs: ['typescript'],
+      });
+      const code = 'const answer = 42;';
+      const decorations = [
+        { start: 0, end: code.length, properties: { class: 'outer' } },
+        { start: 6, end: 17, properties: { class: 'inner' } },
+        { start: 15, end: 17, properties: { class: 'number' } },
+      ];
+      for (const ordered of [decorations, decorations.toReversed()]) {
+        const fragment = JSDOM.fragment(
+          highlighter.codeToHtml(code, {
+            lang: 'typescript',
+            theme: 'pierre-dark',
+            decorations: ordered,
+          })
+        );
+        expect(fragment.querySelectorAll('.outer')).toHaveLength(1);
+        expect(fragment.querySelectorAll('.inner')).toHaveLength(1);
+        expect(fragment.querySelectorAll('.number')).toHaveLength(1);
+        expect(fragment.querySelector('.outer')?.textContent).toBe(code);
+        expect(fragment.querySelector('.outer .inner')?.textContent).toBe(
+          'answer = 42'
+        );
+        expect(fragment.querySelector('.inner .number')?.textContent).toBe(
+          '42'
+        );
+      }
+    });
+
     test(`${preferredHighlighter} renders files, diffs and SSR`, async () => {
       const highlighter = await getSharedHighlighter({
         preferredHighlighter,

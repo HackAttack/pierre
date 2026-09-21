@@ -1,41 +1,18 @@
-import {
-  customTextMateThemes,
-  type CustomThemeLoader,
-  type CustomZedThemeLoader,
-  customZedThemes,
-} from './themeResolver';
+import { type CustomThemeLoader, customThemes } from './themeResolver';
 
-export type { CustomThemeLoader, CustomZedThemeLoader } from './themeResolver';
+export type { CustomThemeLoader } from './themeResolver';
 
-/** Register a TextMate theme for Shiki or a portable Diffs theme for both backends. */
+/** Register a TextMate, Highlights (Zed), or portable Diffs theme loader. */
 export function registerCustomTheme(
   themeName: string,
   loader: CustomThemeLoader
 ): void {
-  if (customTextMateThemes.has(themeName)) {
+  if (customThemes.has(themeName)) {
     console.error(
       'SharedHighlight.registerCustomTheme: theme name already registered',
       themeName
     );
     return;
   }
-  customTextMateThemes.set(themeName, loader);
-}
-
-export const registerCustomTextMateTheme: typeof registerCustomTheme =
-  registerCustomTheme;
-
-/** A Zed registration may share its name with a separate TextMate registration. */
-export function registerCustomZedTheme(
-  themeName: string,
-  loader: CustomZedThemeLoader
-): void {
-  if (customZedThemes.has(themeName)) {
-    console.error(
-      'SharedHighlight.registerCustomZedTheme: theme name already registered',
-      themeName
-    );
-    return;
-  }
-  customZedThemes.set(themeName, loader);
+  customThemes.set(themeName, loader);
 }

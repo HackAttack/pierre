@@ -17,12 +17,16 @@ When using a worker pool, set `preferredHighlighter` in the provider's
 `highlighterOptions`. The pool owns the backend used by its components. Try all
 three backends in the [diffs playground](/playground?highlighter=highlights).
 
-Built-in theme names work across backends. Custom TextMate themes use
-`registerCustomTheme(name, loader)` for Shiki; custom Zed themes use
-`registerCustomZedTheme(name, loader)` for Highlights. `createCSSVariablesTheme`
-returns a portable theme, and `registerCustomCSSVariableTheme` keeps its
-existing arguments and `--diffs-*` variables. Highlights includes its lexers;
-custom TextMate language registrations apply only to Shiki.
+Built-in theme names work across backends. `registerCustomTheme(name, loader)`
+accepts Zed-compatible Highlights themes and theme families, TextMate themes for
+Shiki, and portable `DiffsTheme` objects. Zed themes require the Highlights
+backend; a family uses its first theme. See
+[registerCustomTheme](#utilities-registercustomtheme) for examples.
+
+`createCSSVariablesTheme` returns a portable theme, and
+`registerCustomCSSVariableTheme` keeps its existing arguments and `--diffs-*`
+variables. Highlights includes its lexers; custom TextMate language
+registrations apply only to Shiki.
 
 The shared `DiffsHighlighter` exposes tokens, themes, live editing and streaming
 without exposing Shiki internals. Import Shiki-specific helpers and types

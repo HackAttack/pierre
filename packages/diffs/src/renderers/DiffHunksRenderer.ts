@@ -430,8 +430,12 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
         })
         .catch((error: unknown) => this.onHighlightError(error));
     }
+    const preferredHighlighter = this.options.preferredHighlighter;
     return this.asyncHighlight(diff)
-      .then((fresh) => this.applyRefreshedResult(diff, fresh))
+      .then((fresh) => {
+        if (preferredHighlighter !== this.options.preferredHighlighter) return;
+        this.applyRefreshedResult(diff, fresh);
+      })
       .catch((error: unknown) => this.onHighlightError(error));
   }
 

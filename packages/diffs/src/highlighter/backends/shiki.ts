@@ -11,6 +11,7 @@ import { resolveLanguages } from '../languages/resolveLanguages';
 import { ShikiLiveTokenizer } from '../shiki-live';
 import { ShikiStreamTokenizer } from '../shiki-stream';
 import { createDiffsThemeResolver } from '../themes/themeResolver';
+import type { DiffsTheme } from '../themes/types';
 import type { CodeToTokensOptions, DiffsHighlighter } from '../types';
 import { attachedShikiLanguages, shikiInternals } from './shiki-internals';
 
@@ -30,9 +31,9 @@ export async function createShikiHighlighter(
     engine,
   });
   const themeResolver = createDiffsThemeResolver(name);
-  // Names already passed to raw.loadThemeSync, so the per-render theme check
-  // avoids the array Shiki allocates and scans for getLoadedThemes().
-  const loadedThemes = new Set<string>();
+  // Track theme objects so clearing or replacing a resolved theme reloads its
+  // token colors without querying Shiki's allocated list of loaded names.
+  const loadedThemes = new Map<string, DiffsTheme>();
   const attachedLanguages = new Set(['text', 'ansi']);
   let disposed = false;
   const highlighter: DiffsHighlighter = {
@@ -43,7 +44,7 @@ export async function createShikiHighlighter(
       const theme = themeResolver.getResolvedTheme(themeName);
       if (theme == null)
         throw new Error(`Theme "${themeName}" has not been resolved`);
-      if (!loadedThemes.has(themeName)) {
+      if (loadedThemes.get(themeName) !== theme) {
         const textmate =
           theme.textmate ??
           (theme.cssVariables != null
@@ -51,8 +52,10 @@ export async function createShikiHighlighter(
             : undefined);
         if (textmate == null)
           throw new Error(`Theme "${themeName}" does not support Shiki`);
-        raw.loadThemeSync(textmate);
-        loadedThemes.add(themeName);
+        // Passing the object also refreshes Shiki's active theme when its name
+        // is unchanged; loading the name alone leaves its token color map stale.
+        raw.setTheme(textmate);
+        loadedThemes.set(themeName, theme);
       }
       return theme;
     },

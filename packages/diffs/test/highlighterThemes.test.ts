@@ -6,12 +6,119 @@ import {
 } from '../src/highlighter/shared_highlighter';
 import { cleanUpResolvedThemes } from '../src/highlighter/themes/cleanUpResolvedThemes';
 import { registerCustomTheme } from '../src/highlighter/themes/registerCustomTheme';
-import { customTextMateThemes } from '../src/highlighter/themes/themeResolver';
+import { customThemes } from '../src/highlighter/themes/themeResolver';
 import type { DiffsTheme } from '../src/highlighter/themes/types';
+import { getHighlighterThemeStyles } from '../src/utils/getHighlighterThemeStyles';
 
 afterAll(disposeHighlighter);
 
+for (const preferredHighlighter of ['shiki-js', 'shiki-wasm'] as const) {
+  test(`${preferredHighlighter} reloads token colors after clearing resolved themes`, async () => {
+    const name = `reload-${preferredHighlighter}`;
+    let color = '#ff0000';
+    registerCustomTheme(name, () =>
+      Promise.resolve({
+        name,
+        type: 'dark',
+        colors: {
+          'editor.foreground': color,
+          'editor.background': '#000000',
+        },
+        tokenColors: [{ scope: 'keyword', settings: { foreground: color } }],
+      })
+    );
+    try {
+      const options = {
+        preferredHighlighter,
+        themes: [name],
+        langs: ['javascript'],
+      };
+      const highlighter = await getSharedHighlighter(options);
+      expect(
+        highlighter
+          .codeToTokens('const value = 1;', {
+            lang: 'javascript',
+            theme: name,
+          })
+          .tokens[0][0].color?.toLowerCase()
+      ).toBe(color);
+      color = '#0000ff';
+      cleanUpResolvedThemes(preferredHighlighter);
+      expect(await getSharedHighlighter(options)).toBe(highlighter);
+      expect(highlighter.getTheme(name).fg).toBe(color);
+      expect(
+        highlighter
+          .codeToTokens('const value = 1;', {
+            lang: 'javascript',
+            theme: name,
+          })
+          .tokens[0][0].color?.toLowerCase()
+      ).toBe(color);
+    } finally {
+      customThemes.delete(name);
+      cleanUpResolvedThemes(preferredHighlighter);
+    }
+  });
+}
+
 describe('highlights themes', () => {
+  test('expands named CSS palettes for component roots and editor overlays', async () => {
+    const name = 'zed-css-palette';
+    registerCustomTheme(name, () =>
+      Promise.resolve({
+        name,
+        appearance: 'dark',
+        cssVariables: {
+          prefix: '--app-',
+          defaults: {
+            foreground: '#eeeeee',
+            background: '#111111',
+            added: '#00ff00',
+          },
+        },
+        style: {
+          foreground: 'foreground',
+          background: 'background',
+          created: 'added',
+          'editor.active_line.background': 'active-line',
+          players: [{ cursor: 'cursor', selection: 'selection' }],
+          syntax: { number: 'number' },
+        },
+      })
+    );
+    try {
+      const highlighter = await getSharedHighlighter({
+        preferredHighlighter: 'highlights',
+        themes: [name],
+        langs: [],
+      });
+      const theme = highlighter.getTheme(name);
+      const tokens = highlighter.codeToTokens('42', {
+        lang: 'json',
+        theme: name,
+      });
+      expect(tokens.fg).toBe(theme.fg);
+      expect(tokens.bg).toBe(theme.bg);
+      expect(theme.colors?.['editorCursor.foreground']).toBe(
+        'var(--app-cursor)'
+      );
+      expect(theme.colors?.['editor.selectionBackground']).toBe(
+        'var(--app-selection)'
+      );
+      expect(theme.colors?.['editor.lineHighlightBackground']).toBe(
+        'var(--app-active-line)'
+      );
+      expect(getHighlighterThemeStyles({ highlighter, theme: name })).toBe(
+        'color:var(--app-foreground, #eeeeee);background-color:var(--app-background, #111111);' +
+          '--diffs-fg:var(--app-foreground, #eeeeee);--diffs-bg:var(--app-background, #111111);' +
+          '--diffs-addition-color:var(--app-added, #00ff00);'
+      );
+    } finally {
+      customThemes.delete(name);
+      cleanUpResolvedThemes('highlights');
+    }
+  });
+
   test('exposes editor overlay colors under the keys the editor reads', async () => {
     const highlighter = await getSharedHighlighter({
       preferredHighlighter: 'highlights',
@@ -75,7 +182,7 @@ describe('highlights themes', () => {
       expect(theme.fg).toBe('#111111');
       expect(theme.zed?.style['editor.background']).toBe('#eeeeee');
     } finally {
-      customTextMateThemes.delete(name);
+      customThemes.delete(name);
       cleanUpResolvedThemes('highlights');
     }
   });
