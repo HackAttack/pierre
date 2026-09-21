@@ -72,9 +72,9 @@
         >
         <p class="desc">
           A <code>File</code> rendered through a one-worker pool whose worker is
-          <code>dist/worker/worker-portable.js</code> loaded as a module with
-          its sibling <code>portable/</code> chunks. <code>?highlighter=</code>
-          picks the backend; only its chunks are fetched. Drives
+          <code>dist/worker/worker-portable.js</code> loaded as a single script.
+          <code>?highlighter=</code> picks the backend; <code>&amp;mode=</code>
+          selects classic, module, or blob loading. Drives
           <code>worker-portable.pw.ts</code>. Ready flag:
           <code>window.__workerPortableReady</code>.
         </p>

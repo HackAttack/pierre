@@ -66,7 +66,7 @@ interface Window {
   __selectionActionEdgesReady?: boolean;
   __workerPortableReady?: boolean;
 
-  // worker-portable.html: whether the module worker pool initialized, and
+  // worker-portable.html: whether the portable worker pool initialized, and
   // the first worker or pool error if one occurred.
   __workerPortableInitialized?: boolean;
   __workerPortableError?: string;

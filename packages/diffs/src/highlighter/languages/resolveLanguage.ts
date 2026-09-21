@@ -9,10 +9,16 @@ import {
   ResolvingLanguages,
 } from './constants';
 
+declare const __DIFFS_WORKER__: boolean | undefined;
+
 export async function resolveLanguage(
   lang: Exclude<SupportedLanguages, 'text' | 'ansi'>
 ): Promise<ResolvedLanguage> {
-  if (isWorkerContext()) {
+  if (
+    typeof __DIFFS_WORKER__ !== 'undefined'
+      ? __DIFFS_WORKER__
+      : isWorkerContext()
+  ) {
     throw new Error(
       `resolveLanguage("${lang}") cannot be called from a worker context. Languages must be pre-resolved on the main thread and passed to the worker via the resolvedLanguages parameter.`
     );

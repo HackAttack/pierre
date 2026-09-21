@@ -44,16 +44,16 @@ Shiki implementations also expose optional `loadLanguages` and
 backend syntax data: `textmate` for Shiki and `zed` for Highlights. Bundled
 Pierre and Shiki theme names also resolve to bundled Highlights palettes.
 
-| Export                                                                | Purpose                                                                                        |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `registerCustomTheme`                                                 | Registers a TextMate, Zed-compatible `Theme` / `ThemeFamily`, or portable `DiffsTheme` loader. |
-| `createCSSVariablesTheme`                                             | Creates a portable palette; accepts name, variablePrefix, variableDefaults, and fontStyle.     |
-| `registerCustomCSSVariableTheme`                                      | Preserves `(name, variableDefaults, fontStyle = false)` and the `--diffs-` prefix.             |
-| `resolveTheme`, `resolveThemes`                                       | Resolve themes; optional second argument selects the backend.                                  |
-| `getResolvedOrResolveTheme`, `getResolvedThemes`, `hasResolvedThemes` | Read or populate the selected backend's cache.                                                 |
-| `attachResolvedThemes`                                                | Seeds resolved themes into a highlighter, including worker instances.                          |
-| `areThemesAttached`                                                   | Checks cached themes; optionally takes a backend name or highlighter.                          |
-| `cleanUpResolvedThemes`                                               | Clears caches, preserving registrations.                                                       |
+| Export                                                                | Purpose                                                                                    |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `registerCustomTheme(name, loader, type = 'textmate')`                | Registers a loader with type `'textmate'` for Shiki or `'zed'` for Highlights.             |
+| `createCSSVariablesTheme`                                             | Creates a portable palette; accepts name, variablePrefix, variableDefaults, and fontStyle. |
+| `registerCustomCSSVariableTheme`                                      | Preserves `(name, variableDefaults, fontStyle = false)` and the `--diffs-` prefix.         |
+| `resolveTheme`, `resolveThemes`                                       | Resolve themes; optional second argument selects the backend.                              |
+| `getResolvedOrResolveTheme`, `getResolvedThemes`, `hasResolvedThemes` | Read or populate the selected backend's cache.                                             |
+| `attachResolvedThemes`                                                | Seeds resolved themes into a highlighter, including worker instances.                      |
+| `areThemesAttached`                                                   | Checks cached themes; optionally takes a backend name or highlighter.                      |
+| `cleanUpResolvedThemes`                                               | Clears caches, preserving registrations.                                                   |
 
 Loaders return a theme directly or as a module's `default` export. Zed themes
 use the registered name instead of their display name and require

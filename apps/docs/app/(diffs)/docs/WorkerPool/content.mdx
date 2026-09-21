@@ -30,11 +30,12 @@ Lets begin with the `workerFactory` function. We've provided some examples for
 common use cases below.
 
 Use `@pierre/diffs/worker/worker.js` when your bundler builds the worker and its
-dependencies. For static hosting, use `dist/worker/worker-portable.js` together
-with the `dist/worker/portable/` directory from the package. The portable build
-bundles dependencies into module chunks and loads the selected highlighter
-backend on initialization. Keep the entry and chunks at their original relative
-paths and create the worker with `{ type: 'module' }`.
+dependencies. For static hosting, copy `dist/worker/worker-portable.js` from the
+package. The portable build bundles all highlighter backends and their
+dependencies into one script, so `new Worker(url)` and blob URLs work without
+additional files or a bundling step. It also supports `{ type: 'module' }`. The
+pool resolves themes and Shiki grammars on the main thread and sends them to the
+worker, so their catalogs are excluded from the portable script.
 
 <Notice variant="warning" icon={<IconCiWarningFill />}>
   Only the Vite and NextJS examples have been tested by us. Additional examples
@@ -61,26 +62,16 @@ You may need to explicitly set the `worker.format` option in your
 
 VS Code's
 [webview worker guidance](https://code.visualstudio.com/api/extension-guides/webview#using-web-workers)
-requires a blob or data URL and a single script without runtime imports. The
-portable module build does not satisfy that requirement. Bundle it into a single
-classic script as part of your extension build, then use the blob recipe below.
-This includes all backends in one file and gives up lazy chunk loading.
-
-For example, with [esbuild](https://esbuild.github.io/api/#splitting) installed
-in your extension project:
-
-```sh
-pnpm exec esbuild node_modules/@pierre/diffs/dist/worker/worker-portable.js \
-  --bundle --format=iife --platform=browser --outfile=media/diffs-worker.js
-```
+requires a blob or data URL and a single script without runtime imports. Copy
+`dist/worker/worker-portable.js` into your extension's `media/` directory and
+use the blob recipe below. The portable script is already bundled.
 
 **Extension side:** Add the output directory to `localResourceRoots` in your
 `getWebviewOptions()`:
 
 <DocsCodeExample {...vscodeLocalRoots} />
 
-Create the URI for your bundled `media/diffs-worker.js` in
-`_getHtmlForWebview()`:
+Create the URI for `media/worker-portable.js` in `_getHtmlForWebview()`:
 
 <DocsCodeExample {...vscodeWorkerUri} />
 
@@ -115,19 +106,16 @@ Create the `workerFactory` function:
 #### Rollup / Static Files
 
 If your bundler doesn't have special worker support, copy
-`dist/worker/worker-portable.js` and the entire `dist/worker/portable/`
-directory into your static assets. For the example below, serve them at
-`/static/workers/worker-portable.js` and `/static/workers/portable/` on the same
-origin as your page. Serve the chunks with a JavaScript content type and include
-them in each deployment.
+`dist/worker/worker-portable.js` into your static assets. For the example below,
+serve it at `/static/workers/worker-portable.js` on the same origin as your page
+with a JavaScript content type.
 
 <DocsCodeExample {...helperStatic} />
 
 #### Vanilla JS (No Bundler)
 
-For projects without a bundler, host the portable entry and its `portable/`
-directory together on your server and reference the entry directly. Copying only
-the entry, or turning its source into a blob URL, breaks its relative imports.
+For projects without a bundler, host `worker-portable.js` on your server and
+reference it directly.
 
 <DocsCodeExample {...helperVanilla} />
 
@@ -165,8 +153,9 @@ already editor-compatible, so entering edit mode skips a one-time re-render of
 that file.
 
 Set `preferredHighlighter` when initializing the pool to choose `'shiki-js'`
-(the default), `'shiki-wasm'`, or `'highlights'`. The portable module worker
-loads the chosen backend and any chunks it needs on demand.
+(the default), `'shiki-wasm'`, or `'highlights'`. The portable worker includes
+all backends in its download and initializes the chosen backend. Use the regular
+worker entry with your bundler for lazy backend loading.
 
 #### React
 

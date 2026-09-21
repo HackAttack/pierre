@@ -64,27 +64,30 @@ for (const preferredHighlighter of ['shiki-js', 'shiki-wasm'] as const) {
 describe('highlights themes', () => {
   test('expands named CSS palettes for component roots and editor overlays', async () => {
     const name = 'zed-css-palette';
-    registerCustomTheme(name, () =>
-      Promise.resolve({
-        name,
-        appearance: 'dark',
-        cssVariables: {
-          prefix: '--app-',
-          defaults: {
-            foreground: '#eeeeee',
-            background: '#111111',
-            added: '#00ff00',
+    registerCustomTheme(
+      name,
+      () =>
+        Promise.resolve({
+          name,
+          appearance: 'dark',
+          cssVariables: {
+            prefix: '--app-',
+            defaults: {
+              foreground: '#eeeeee',
+              background: '#111111',
+              added: '#00ff00',
+            },
           },
-        },
-        style: {
-          foreground: 'foreground',
-          background: 'background',
-          created: 'added',
-          'editor.active_line.background': 'active-line',
-          players: [{ cursor: 'cursor', selection: 'selection' }],
-          syntax: { number: 'number' },
-        },
-      })
+          style: {
+            foreground: 'foreground',
+            background: 'background',
+            created: 'added',
+            'editor.active_line.background': 'active-line',
+            players: [{ cursor: 'cursor', selection: 'selection' }],
+            syntax: { number: 'number' },
+          },
+        }),
+      'zed'
     );
     try {
       const highlighter = await getSharedHighlighter({
@@ -169,7 +172,7 @@ describe('highlights themes', () => {
         },
       },
     };
-    registerCustomTheme(name, () => Promise.resolve(custom));
+    registerCustomTheme(name, () => Promise.resolve(custom), 'zed');
     try {
       cleanUpResolvedThemes('highlights');
       const highlighter = await getSharedHighlighter({

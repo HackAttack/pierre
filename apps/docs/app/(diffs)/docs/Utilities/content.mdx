@@ -129,19 +129,21 @@ highlighting with no async loading delay.
 
 ### registerCustomTheme [toc-ignore]
 
-Register a lazy loader for a TextMate theme, a Zed-compatible Highlights `Theme`
-or `ThemeFamily`, or a portable `DiffsTheme`. The loader can return the theme
-directly or as a module's `default` export.
+Use `registerCustomTheme(name, loader, type = 'textmate')` to register a lazy
+loader. The optional third argument defaults to `'textmate'` for Shiki; pass
+`'zed'` for Highlights. Existing two-argument calls keep working. The loader
+accepts a TextMate theme, a Zed-compatible `Theme` or `ThemeFamily`, or a
+portable `DiffsTheme`, directly or as a module's `default` export.
 
 TextMate themes use either Shiki backend, and their `name` must match the
 registered name. Zed themes use `preferredHighlighter: 'highlights'`; the
 registered name replaces their display name. A Zed family uses its first theme;
 return a specific member from the loader to select another.
 
-Register one loader per name. Raw TextMate themes require Shiki, and raw Zed
-themes require Highlights. To support every backend with one theme, use
-`createCSSVariablesTheme` or a `DiffsTheme` containing both a normalized
-`textmate` palette and a `zed` palette.
+Register one loader per name and type; the same name can have separate TextMate
+and Zed loaders. Register a portable `DiffsTheme` for both types to use its
+palettes across backends. `registerCustomCSSVariableTheme` registers both types
+automatically.
 
 <DocsCodeExample {...registerCustomTheme} />
 

@@ -1,9 +1,10 @@
 # Recipe: register custom highlighting
 
-Register themes before a surface loads them. `registerCustomTheme` accepts a
-loader for a TextMate theme, a Zed-compatible Highlights `Theme` or
-`ThemeFamily`, or a portable `DiffsTheme`. Loaders may return the theme directly
-or as a module's `default` export.
+Register themes before a surface loads them with
+`registerCustomTheme(name, loader, type = 'textmate')`. Use `'textmate'` for
+Shiki and `'zed'` for Highlights. Loaders accept a TextMate theme, a
+Zed-compatible `Theme` or `ThemeFamily`, or a portable `DiffsTheme`, directly or
+as a module's `default` export.
 
 For a Zed-compatible theme:
 
@@ -11,7 +12,7 @@ For a Zed-compatible theme:
 import { registerCustomTheme } from '@pierre/diffs';
 import { FileDiff } from '@pierre/diffs/react';
 
-registerCustomTheme('app-dark', () => import('./my-zed-theme.json'));
+registerCustomTheme('app-dark', () => import('./my-zed-theme.json'), 'zed');
 
 <FileDiff
   oldFile={oldFile}
@@ -40,7 +41,8 @@ registerCustomTheme('my-theme', () => import('./my-textmate-theme.json'));
 Set `file.lang` and `options.theme` to the registered names. Custom languages
 apply to Shiki; Highlights bundles its lexers and ignores custom grammars.
 
-Register one loader per name. For a palette that works across backends:
+Register one loader per name and type. The same name can have separate TextMate
+and Zed loaders. For a palette that works across backends:
 
 ```ts
 import { registerCustomCSSVariableTheme } from '@pierre/diffs';
@@ -56,3 +58,5 @@ registerCustomCSSVariableTheme('app-palette', {
 This retains the `--diffs-*` variables on every backend, including defaults and
 optional font styles. `createCSSVariablesTheme(options)` returns a portable
 `DiffsTheme` for use with `registerCustomTheme` or application theme catalogs.
+Register a portable theme's loader for both `'textmate'` and `'zed'` to use both
+palettes; `registerCustomCSSVariableTheme` does this automatically.

@@ -13,10 +13,15 @@ import type { HighlighterTypes } from '../../types';
 import { isWorkerContext } from '../../utils/isWorkerContext';
 import type { DiffsTheme } from './types';
 
+declare const __DIFFS_WORKER__: boolean | undefined;
+
 export type CustomThemeLoader = ThemeLoader<
   ThemeRegistration | DiffsTheme | ZedTheme | ZedThemeFamily
 >;
-export const customThemes: Map<string, CustomThemeLoader> = new Map();
+export const customThemes: Map<
+  string,
+  Partial<Record<'textmate' | 'zed', CustomThemeLoader>>
+> = new Map();
 const resolvers = new Map<HighlighterTypes, ThemeResolver<DiffsTheme>>();
 
 // Map Zed colors to the VS Code keys used by editor and diff overlays.
@@ -106,20 +111,28 @@ export function createDiffsThemeResolver(
   if (resolver !== undefined) return resolver;
   resolver = createThemeResolver<DiffsTheme>({
     fallbackLoader: async (name) => {
-      if (isWorkerContext()) {
+      if (
+        typeof __DIFFS_WORKER__ !== 'undefined'
+          ? __DIFFS_WORKER__
+          : isWorkerContext()
+      ) {
         throw new Error(
           `Theme "${name}" cannot be resolved from a worker context. Themes must be pre-resolved on the main thread and passed to the worker via the resolvedThemes parameter.`
         );
       }
+      const custom = customThemes.get(name);
       if (backend === 'highlights') {
         // Custom Zed palettes take precedence over the bundled catalog.
-        const loader = customThemes.get(name);
+        const loader = custom?.zed;
         if (loader !== undefined) {
           const loaded = await loader();
           const theme = 'default' in loaded ? loaded.default : loaded;
           if ('zed' in theme && theme.zed !== undefined) return theme;
           if ('style' in theme || 'themes' in theme)
             return createHighlightsTheme(name, theme);
+          throw new Error(
+            `Theme "${name}" is a TextMate theme; register a Zed theme with registerCustomTheme(name, loader, 'zed') for Highlights.`
+          );
         }
         const { themes: bundledHighlightsThemes } =
           await import('@pierre/highlights/themes/loader');
@@ -128,13 +141,13 @@ export function createDiffsThemeResolver(
           const loaded = await bundledLoader();
           return createHighlightsTheme(name, loaded.default);
         }
-        if (loader !== undefined) {
+        if (custom?.textmate !== undefined) {
           throw new Error(
-            `Theme "${name}" is a TextMate theme; use a Zed theme or a portable DiffsTheme with registerCustomTheme for Highlights.`
+            `Theme "${name}" is only registered for TextMate; use registerCustomTheme(name, loader, 'zed') for Highlights.`
           );
         }
       } else {
-        const loader = customThemes.get(name);
+        const loader = custom?.textmate;
         let loaded: ThemeRegistration | DiffsTheme | ZedTheme | ZedThemeFamily;
         if (loader !== undefined) {
           const result = await loader();
@@ -142,6 +155,11 @@ export function createDiffsThemeResolver(
         } else {
           const { themes } = await import('@pierre/theming/themes');
           const descriptor = themes.getTheme(name);
+          if (descriptor === undefined && custom?.zed !== undefined) {
+            throw new Error(
+              `Theme "${name}" is only registered for Zed; use registerCustomTheme(name, loader, 'textmate') for Shiki.`
+            );
+          }
           if (descriptor === undefined)
             throw new Error(`No valid theme loader registered for "${name}"`);
           const result = await descriptor.load();

@@ -200,7 +200,7 @@ registerCustomTheme('inline-theme', async () => ({
 }));
 
 // Option 3: A Zed-compatible Highlights theme or theme family
-registerCustomTheme('my-zed-theme', () => import('./my-zed-theme.json'));
+registerCustomTheme('my-zed-theme', () => import('./my-zed-theme.json'), 'zed');
 
 // Use the registered name and the matching backend:
 // <FileDiff options={{ theme: 'my-custom-theme' }} ... />

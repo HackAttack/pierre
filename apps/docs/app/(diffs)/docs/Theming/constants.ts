@@ -511,7 +511,7 @@ registerCustomTheme('my-theme-dark', async () => {
 });
 
 // Option 4: A Zed-compatible theme or family for Highlights
-registerCustomTheme('my-zed-theme', () => import('./themes/my-zed-theme.json'));
+registerCustomTheme('my-zed-theme', () => import('./themes/my-zed-theme.json'), 'zed');
 // Use options: { theme: 'my-zed-theme', preferredHighlighter: 'highlights' }`,
   },
   options,

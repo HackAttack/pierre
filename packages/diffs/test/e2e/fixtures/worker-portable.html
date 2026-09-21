@@ -41,10 +41,18 @@
         throw new Error('Missing file mount.');
       }
 
-      // Host the module worker beside its portable/ directory so its selected
-      // backend can load on demand without bundler-specific import rewriting.
+      // Tests can relocate the script to verify it needs no sibling files.
       const params = new URLSearchParams(location.search);
       const preferredHighlighter = params.get('highlighter') ?? 'shiki-js';
+      const mode = params.get('mode') ?? 'classic';
+      let workerUrl =
+        params.get('workerUrl') ?? '/dist/worker/worker-portable.js';
+      if (mode === 'blob') {
+        const response = await fetch(workerUrl);
+        workerUrl = URL.createObjectURL(
+          new Blob([await response.text()], { type: 'text/javascript' })
+        );
+      }
 
       const recordError = (message) => {
         window.__workerPortableError ??= message;
@@ -55,9 +63,10 @@
           poolSize: 1,
           workerInitializationTimeout: 10000,
           workerFactory: () => {
-            const worker = new Worker('/dist/worker/worker-portable.js', {
-              type: 'module',
-            });
+            const worker =
+              mode === 'module'
+                ? new Worker(workerUrl, { type: 'module' })
+                : new Worker(workerUrl);
             worker.addEventListener('error', (event) => {
               recordError(event.message ?? 'Worker error');
             });
@@ -79,6 +88,8 @@
         window.__workerPortableInitialized = workerPool.isInitialized();
       } catch (error) {
         recordError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (mode === 'blob') URL.revokeObjectURL(workerUrl);
       }
 
       const file = {

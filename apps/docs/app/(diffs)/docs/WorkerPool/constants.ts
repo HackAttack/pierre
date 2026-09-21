@@ -69,7 +69,7 @@ export const WORKER_POOL_VSCODE_WORKER_URI: PreloadFileOptions<
     contents: `const workerScriptPath = vscode.Uri.joinPath(
   this._extensionUri,
   'media',
-  'diffs-worker.js'
+  'worker-portable.js'
 );
 const workerScriptUri = webview.asWebviewUri(workerScriptPath);`,
   },
@@ -187,11 +187,11 @@ export const WORKER_POOL_HELPER_STATIC: PreloadFileOptions<
 > = {
   file: {
     name: 'utils/workerFactory.ts',
-    contents: `// Copy dist/worker/worker-portable.js and dist/worker/portable/
-// from @pierre/diffs into public/static/workers/, preserving their layout.
+    contents: `// Copy dist/worker/worker-portable.js from @pierre/diffs
+// into public/static/workers/.
 
 export function workerFactory(): Worker {
-  return new Worker('/static/workers/worker-portable.js', { type: 'module' });
+  return new Worker('/static/workers/worker-portable.js');
 }`,
   },
   options,
@@ -203,10 +203,10 @@ export const WORKER_POOL_HELPER_VANILLA: PreloadFileOptions<
 > = {
   file: {
     name: 'utils/workerFactory.js',
-    contents: `// Host worker-portable.js with its portable/ directory beside it.
+    contents: `// Host worker-portable.js on your server.
 
 export function workerFactory() {
-  return new Worker('/workers/worker-portable.js', { type: 'module' });
+  return new Worker('/workers/worker-portable.js');
 }`,
   },
   options,

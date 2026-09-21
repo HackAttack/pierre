@@ -2,17 +2,21 @@ import { type CustomThemeLoader, customThemes } from './themeResolver';
 
 export type { CustomThemeLoader } from './themeResolver';
 
-/** Register a TextMate, Highlights (Zed), or portable Diffs theme loader. */
+/** Register a lazy theme loader for Shiki (TextMate) or Highlights (Zed). */
 export function registerCustomTheme(
   themeName: string,
-  loader: CustomThemeLoader
+  loader: CustomThemeLoader,
+  type: 'textmate' | 'zed' = 'textmate'
 ): void {
-  if (customThemes.has(themeName)) {
+  const themes = customThemes.get(themeName) ?? {};
+  if (themes[type] !== undefined) {
     console.error(
-      'SharedHighlight.registerCustomTheme: theme name already registered',
-      themeName
+      'SharedHighlight.registerCustomTheme: theme name and type already registered',
+      themeName,
+      type
     );
     return;
   }
-  customThemes.set(themeName, loader);
+  themes[type] = loader;
+  customThemes.set(themeName, themes);
 }

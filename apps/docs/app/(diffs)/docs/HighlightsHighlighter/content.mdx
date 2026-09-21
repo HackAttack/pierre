@@ -17,11 +17,11 @@ When using a worker pool, set `preferredHighlighter` in the provider's
 `highlighterOptions`. The pool owns the backend used by its components. Try all
 three backends in the [diffs playground](/playground?highlighter=highlights).
 
-Built-in theme names work across backends. `registerCustomTheme(name, loader)`
-accepts Zed-compatible Highlights themes and theme families, TextMate themes for
-Shiki, and portable `DiffsTheme` objects. Zed themes require the Highlights
-backend; a family uses its first theme. See
-[registerCustomTheme](#utilities-registercustomtheme) for examples.
+Built-in theme names work across backends.
+`registerCustomTheme(name, loader, 'zed')` accepts Zed-compatible Highlights
+themes, theme families, and portable `DiffsTheme` objects. Use `'textmate'` to
+register a loader for Shiki under the same name. A Zed family uses its first
+theme. See [registerCustomTheme](#utilities-registercustomtheme) for examples.
 
 `createCSSVariablesTheme` returns a portable theme, and
 `registerCustomCSSVariableTheme` keeps its existing arguments and `--diffs-*`

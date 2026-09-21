@@ -96,7 +96,7 @@ describe('backend theme resolution', () => {
     }
   });
 
-  test('selects each backend palette from one portable theme registration', async () => {
+  test('selects each backend palette from a portable theme registered for both formats', async () => {
     const { normalizeTheme } = await import('shiki/core');
     const { registerCustomTheme } =
       await import('../src/highlighter/themes/registerCustomTheme');
@@ -126,6 +126,7 @@ describe('backend theme resolution', () => {
       },
     };
     registerCustomTheme(name, () => Promise.resolve(portable));
+    registerCustomTheme(name, () => Promise.resolve(portable), 'zed');
     try {
       const textmate = await resolveTheme(name, 'shiki-js');
       const zed = await resolveTheme(name, 'highlights');

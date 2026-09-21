@@ -64,6 +64,7 @@ import {
   EDITOR_OPTIONS_TYPE,
   EDITOR_PUBLIC_API,
 } from '../docs/Edit/constants';
+import { HIGHLIGHTER_EXAMPLE } from '../docs/Highlighters/constants';
 import {
   HIGHLIGHTS_API_RUNTIME,
   HIGHLIGHTS_API_TYPES,
@@ -294,8 +295,10 @@ async function CoreTypesSection() {
 }
 
 async function HighlightersSection() {
+  const highlighterExample = await preloadFile(HIGHLIGHTER_EXAMPLE);
   const content = await renderMDX({
     filePath: '(diffs)/docs/Highlighters/content.mdx',
+    scope: { highlighterExample },
   });
   return <ProseWrapper>{content}</ProseWrapper>;
 }
