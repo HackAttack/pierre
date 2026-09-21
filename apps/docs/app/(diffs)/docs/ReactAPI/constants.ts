@@ -136,9 +136,10 @@ interface DiffOptions {
   // 'dark' or 'light' - forces specific theme
   themeType: 'system',
 
-  // Choose the Shiki engine:
+  // Choose the highlighter backend:
   // 'shiki-js' (default) - JavaScript regex engine
   // 'shiki-wasm' - WASM Oniguruma engine
+  // 'highlights' - bundled WASM lexers
   preferredHighlighter: 'shiki-js',
 
   // ─────────────────────────────────────────────────────────────
@@ -951,9 +952,10 @@ interface FileOptions {
   // 'dark' or 'light' - forces specific theme
   themeType: 'system',
 
-  // Choose the Shiki engine:
+  // Choose the highlighter backend:
   // 'shiki-js' (default) - JavaScript regex engine
   // 'shiki-wasm' - WASM Oniguruma engine
+  // 'highlights' - bundled WASM lexers
   preferredHighlighter: 'shiki-js',
 
   // ─────────────────────────────────────────────────────────────

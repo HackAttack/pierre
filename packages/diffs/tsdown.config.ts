@@ -71,6 +71,7 @@ const config: UserConfig[] = defineConfig([
     platform: 'neutral',
   },
   {
+    // Bundle dependencies into module chunks; load only the selected backend.
     entry: ['src/worker/worker-portable.ts'],
     outDir: 'dist/worker',
     tsconfig: './tsconfig.json',
@@ -80,7 +81,7 @@ const config: UserConfig[] = defineConfig([
     dts: { sourcemap: true, tsgo: true },
     platform: 'neutral',
     format: 'esm',
-    treeshake: false,
+    outputOptions: { chunkFileNames: 'portable/[name]-[hash].js' },
   },
 ]);
 

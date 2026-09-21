@@ -1,8 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 
-// Importing shared_highlighter for its side effect: it registers the four
-// pierre-* themes against the diffs theme registry at module load.
-import '../src/highlighter/shared_highlighter';
 import { cleanUpResolvedThemes } from '../src/highlighter/themes/cleanUpResolvedThemes';
 import { getResolvedThemes } from '../src/highlighter/themes/getResolvedThemes';
 import { hasResolvedThemes } from '../src/highlighter/themes/hasResolvedThemes';
@@ -64,5 +61,127 @@ describe('resolveTheme contract', () => {
     expect(hasResolvedThemes(['pierre-dark'])).toBe(true);
     cleanUpResolvedThemes();
     expect(hasResolvedThemes(['pierre-dark'])).toBe(false);
+  });
+});
+
+describe('backend theme resolution', () => {
+  test('portable factory themes can attach directly without registration', async () => {
+    const { createHighlighter } =
+      await import('../src/highlighter/shared_highlighter');
+    const { attachResolvedThemes } =
+      await import('../src/highlighter/themes/attachResolvedThemes');
+    const { createCSSVariablesTheme } =
+      await import('../src/highlighter/themes/createCSSVariablesTheme');
+    const theme = createCSSVariablesTheme({
+      name: 'direct-css-theme',
+      variableDefaults: { 'token-keyword': '#c084fc' },
+    });
+    for (const preferredHighlighter of ['shiki-js', 'highlights'] as const) {
+      const highlighter = await createHighlighter({ preferredHighlighter });
+      try {
+        attachResolvedThemes(theme, highlighter);
+        await highlighter.loadLanguages?.(['javascript']);
+        const { tokens } = highlighter.codeToTokens('const value = 1;', {
+          lang: 'javascript',
+          theme: theme.name,
+        });
+        expect(
+          tokens.flat().find((token) => token.content.includes('const'))?.color
+        ).toBe('var(--diffs-token-keyword, #c084fc)');
+      } finally {
+        highlighter.dispose();
+      }
+    }
+  });
+
+  test('keeps TextMate and Zed registrations under the same name separate', async () => {
+    const { registerCustomTheme, registerCustomZedTheme } =
+      await import('../src/highlighter/themes/registerCustomTheme');
+    const name = 'backend-specific-theme';
+    registerCustomTheme(name, () =>
+      Promise.resolve({
+        name,
+        type: 'light',
+        colors: {
+          'editor.foreground': '#112233',
+          'editor.background': '#ffffff',
+        },
+        tokenColors: [],
+      })
+    );
+    registerCustomZedTheme(name, () =>
+      Promise.resolve({
+        name: 'Friendly Zed Name',
+        appearance: 'dark',
+        style: { text: '#ddeeff', background: '#001122', created: '#00ff00' },
+      })
+    );
+    const textmate = await resolveTheme(name, 'shiki-js');
+    const zed = await resolveTheme(name, 'highlights');
+    expect(textmate.fg).toBe('#112233');
+    expect(textmate.textmate).toBeDefined();
+    expect(zed.fg).toBe('#ddeeff');
+    expect(zed.zed?.name).toBe(name);
+    expect(zed.colors?.['gitDecoration.addedResourceForeground']).toBe(
+      '#00ff00'
+    );
+    expect(textmate).not.toBe(zed);
+  });
+
+  test('resolves bundled Highlights themes without a TextMate palette', async () => {
+    const theme = await resolveTheme('pierre-dark', 'highlights');
+    expect(theme.fg).toBe('#fafafa');
+    expect(theme.bg).toBe('#0a0a0a');
+    expect(theme.zed).toBeDefined();
+    expect(theme.textmate).toBeUndefined();
+  });
+
+  test('portable CSS themes preserve palette names and defaults on both backends', async () => {
+    const { registerCustomCSSVariableTheme } =
+      await import('../src/highlighter/themes/registerCustomCSSVariableTheme');
+    const { getSharedHighlighter } =
+      await import('../src/highlighter/shared_highlighter');
+    const name = 'portable-css-theme';
+    registerCustomCSSVariableTheme(name, {
+      'token-keyword': '#ff0000',
+      foreground: '#111111',
+    });
+    for (const preferredHighlighter of ['shiki-js', 'highlights'] as const) {
+      const highlighter = await getSharedHighlighter({
+        themes: [name],
+        langs: ['javascript'],
+        preferredHighlighter,
+      });
+      const result = highlighter.codeToTokens('const answer = 42;', {
+        lang: 'javascript',
+        theme: name,
+      });
+      expect(
+        result.tokens.flat().find((token) => token.content.includes('const'))
+          ?.color
+      ).toBe('var(--diffs-token-keyword, #ff0000)');
+      expect(result.fg).toBe('var(--diffs-foreground, #111111)');
+      expect(
+        highlighter.codeToHtml('const answer = 42;', {
+          lang: 'javascript',
+          theme: name,
+        })
+      ).toContain('var(--diffs-token-keyword, #ff0000)');
+    }
+  });
+
+  test('rejects TextMate-only custom themes on Highlights with an actionable error', async () => {
+    const { registerCustomTheme } =
+      await import('../src/highlighter/themes/registerCustomTheme');
+    registerCustomTheme('textmate-only-test', () =>
+      Promise.resolve({
+        name: 'textmate-only-test',
+        type: 'dark',
+        tokenColors: [],
+      })
+    );
+    expect(resolveTheme('textmate-only-test', 'highlights')).rejects.toThrow(
+      'registerCustomZedTheme'
+    );
   });
 });

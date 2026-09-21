@@ -13,7 +13,6 @@ import {
   getSharedHighlighter,
 } from '../highlighter/shared_highlighter';
 import { areThemesAttached } from '../highlighter/themes/areThemesAttached';
-import { hasResolvedThemes } from '../highlighter/themes/hasResolvedThemes';
 import type {
   BaseCodeOptions,
   DiffsHighlighter,
@@ -40,7 +39,6 @@ import { createPreElement } from '../utils/createPreElement';
 import { getFiletypeFromFileName } from '../utils/getFiletypeFromFileName';
 import { getHighlighterOptions } from '../utils/getHighlighterOptions';
 import { getLineAnnotationName } from '../utils/getLineAnnotationName';
-import { getThemes } from '../utils/getThemes';
 import {
   createGutterGap,
   createGutterItem,
@@ -158,18 +156,25 @@ export class FileRenderer<LAnnotation = undefined> {
     private workerManager?: WorkerPoolManager | undefined
   ) {
     if (workerManager?.isWorkingPool() !== true) {
-      this.highlighter = areThemesAttached(options.theme ?? DEFAULT_THEMES)
-        ? getHighlighterIfLoaded()
-        : undefined;
+      this.highlighter = getHighlighterIfLoaded({
+        theme: options.theme ?? DEFAULT_THEMES,
+        preferredHighlighter:
+          workerManager?.getPreferredHighlighter() ??
+          options.preferredHighlighter,
+      });
     }
   }
 
   public setOptions(options: FileRendererOptions): void {
+    if (this.options.preferredHighlighter !== options.preferredHighlighter) {
+      this.highlighter = undefined;
+      this.clearRenderCache();
+    }
     this.options = options;
   }
 
   public mergeOptions(options: Partial<FileRendererOptions>): void {
-    this.options = { ...this.options, ...options };
+    this.setOptions({ ...this.options, ...options });
   }
 
   public setLineAnnotations(
@@ -452,7 +457,8 @@ export class FileRenderer<LAnnotation = undefined> {
       return (
         (renderCache.result == null && renderCache.hydrated !== true) ||
         this.workerManager?.isWorkingPool() === true ||
-        (this.highlighter != null && areThemesAttached(options.theme))
+        (this.highlighter != null &&
+          areThemesAttached(options.theme, this.highlighter))
       );
     }
     // Hydration has highlighted DOM without a local AST. It is still active
@@ -469,7 +475,10 @@ export class FileRenderer<LAnnotation = undefined> {
       return !renderCache.highlighted;
     }
 
-    return this.highlighter != null && areThemesAttached(options.theme);
+    return (
+      this.highlighter != null &&
+      areThemesAttached(options.theme, this.highlighter)
+    );
   }
 
   public getOrCreateLineCache(file: FileContents): string[] {
@@ -766,11 +775,17 @@ export class FileRenderer<LAnnotation = undefined> {
       }
     } else {
       this.computedLang = file.lang ?? getFiletypeFromFileName(file.name);
-      this.highlighter ??= getHighlighterIfLoaded();
+      this.highlighter ??= getHighlighterIfLoaded({
+        preferredHighlighter:
+          this.workerManager?.getPreferredHighlighter() ??
+          this.options.preferredHighlighter,
+      });
       const hasThemes =
-        this.highlighter != null && areThemesAttached(options.theme);
+        this.highlighter != null &&
+        areThemesAttached(options.theme, this.highlighter);
       const hasLangs =
-        this.highlighter != null && areLanguagesAttached(this.computedLang);
+        this.highlighter != null &&
+        areLanguagesAttached(this.computedLang, this.highlighter);
       const canHighlight = !forcePlainText && hasLangs;
 
       // If we have any semblance of a highlighter with the correct theme(s)
@@ -804,7 +819,10 @@ export class FileRenderer<LAnnotation = undefined> {
       // process which will involve initializing the highlighter with new themes
       // and languages
       if (!hasThemes || (!forcePlainText && !hasLangs)) {
+        const preferredHighlighter = this.options.preferredHighlighter;
         void this.asyncHighlight(file).then(({ result, options }) => {
+          if (preferredHighlighter !== this.options.preferredHighlighter)
+            return;
           this.applyHighlightResult(file, result, options, !forcePlainText);
         });
       }
@@ -839,10 +857,11 @@ export class FileRenderer<LAnnotation = undefined> {
       : (file.lang ?? getFiletypeFromFileName(file.name));
     const hasThemes =
       this.highlighter != null &&
-      hasResolvedThemes(getThemes(this.getLocalHighlightTheme()));
+      areThemesAttached(this.getLocalHighlightTheme(), this.highlighter);
     const hasLangs =
       forcePlainText ||
-      (this.highlighter != null && areLanguagesAttached(this.computedLang));
+      (this.highlighter != null &&
+        areLanguagesAttached(this.computedLang, this.highlighter));
     // If we don't have the required langs or themes, then we need to
     // initialize the highlighter to load the appropriate languages and themes
     if (this.highlighter == null || !hasThemes || !hasLangs) {
@@ -1017,15 +1036,26 @@ export class FileRenderer<LAnnotation = undefined> {
   }
 
   public async initializeHighlighter(): Promise<DiffsHighlighter> {
-    this.highlighter = await getSharedHighlighter(
+    const preferredHighlighter =
+      this.workerManager?.getPreferredHighlighter() ??
+      this.options.preferredHighlighter ??
+      'shiki-js';
+    const highlighter = await getSharedHighlighter(
       getHighlighterOptions(this.computedLang, {
         theme: this.getLocalHighlightTheme(),
-        preferredHighlighter:
-          this.workerManager?.getPreferredHighlighter() ??
-          this.options.preferredHighlighter,
+        preferredHighlighter,
       })
     );
-    return this.highlighter;
+    if (
+      preferredHighlighter !==
+      (this.workerManager?.getPreferredHighlighter() ??
+        this.options.preferredHighlighter ??
+        'shiki-js')
+    ) {
+      return this.initializeHighlighter();
+    }
+    this.highlighter = highlighter;
+    return highlighter;
   }
 
   public onHighlightSuccess(

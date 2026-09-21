@@ -85,7 +85,14 @@ This reference lists every export from `@pierre/diffs/worker`, every public
 
 ## Worker script entries
 
-| Import                                    | Purpose                                                    |
-| ----------------------------------------- | ---------------------------------------------------------- |
-| `@pierre/diffs/worker/worker.js`          | Supplies the module worker that uses package dependencies. |
-| `@pierre/diffs/worker/worker-portable.js` | Supplies a bundled module worker.                          |
+| Import                                    | Purpose                                                                     |
+| ----------------------------------------- | --------------------------------------------------------------------------- |
+| `@pierre/diffs/worker/worker.js`          | Supplies the module worker that uses package dependencies.                  |
+| `@pierre/diffs/worker/worker-portable.js` | Supplies a module worker with bundled dependencies and lazy backend chunks. |
+
+For static hosting, copy `dist/worker/worker-portable.js` and its entire
+`dist/worker/portable/` directory, preserving their relative paths. Start the
+entry by URL with `new Worker(url, { type: 'module' })`; it loads the selected
+backend on demand. Copying only the entry or converting its source to a blob
+breaks the relative imports. Environments requiring a single classic worker,
+such as VS Code webviews, need a separate single-file bundle.

@@ -1,6 +1,5 @@
-import { createCssVariablesTheme as createCSSVariablesTheme } from 'shiki';
-
 import { formatCSSVariablePrefix } from '../../utils/formatCSSVariablePrefix';
+import { createCSSVariablesTheme } from './createCSSVariablesTheme';
 import { registerCustomTheme } from './registerCustomTheme';
 
 export function registerCustomCSSVariableTheme(

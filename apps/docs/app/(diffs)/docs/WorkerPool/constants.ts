@@ -52,14 +52,7 @@ export const WORKER_POOL_VSCODE_LOCAL_ROOTS: PreloadFileOptions<
     enableScripts: true,
     localResourceRoots: [
       // ... your other roots
-      vscode.Uri.joinPath(
-        extensionUri,
-        'node_modules',
-        '@pierre',
-        'diffs',
-        'dist',
-        'worker'
-      ),
+      vscode.Uri.joinPath(extensionUri, 'media'),
     ],
   };
 }`,
@@ -75,12 +68,8 @@ export const WORKER_POOL_VSCODE_WORKER_URI: PreloadFileOptions<
     name: 'extension.ts',
     contents: `const workerScriptPath = vscode.Uri.joinPath(
   this._extensionUri,
-  'node_modules',
-  '@pierre',
-  'diffs',
-  'dist',
-  'worker',
-  'worker-portable.js'
+  'media',
+  'diffs-worker.js'
 );
 const workerScriptUri = webview.asWebviewUri(workerScriptPath);`,
   },
@@ -198,12 +187,11 @@ export const WORKER_POOL_HELPER_STATIC: PreloadFileOptions<
 > = {
   file: {
     name: 'utils/workerFactory.ts',
-    contents: `// For Rollup or bundlers without special worker support:
-// 1. Copy worker.js to your static/public folder
-// 2. Reference it by URL
+    contents: `// Copy dist/worker/worker-portable.js and dist/worker/portable/
+// from @pierre/diffs into public/static/workers/, preserving their layout.
 
 export function workerFactory(): Worker {
-  return new Worker('/static/workers/worker.js', { type: 'module' });
+  return new Worker('/static/workers/worker-portable.js', { type: 'module' });
 }`,
   },
   options,
@@ -215,11 +203,10 @@ export const WORKER_POOL_HELPER_VANILLA: PreloadFileOptions<
 > = {
   file: {
     name: 'utils/workerFactory.js',
-    contents: `// No bundler / Vanilla JS
-// Host worker.js on your server and reference it by URL
+    contents: `// Host worker-portable.js with its portable/ directory beside it.
 
 export function workerFactory() {
-  return new Worker('/path/to/worker.js', { type: 'module' });
+  return new Worker('/workers/worker-portable.js', { type: 'module' });
 }`,
   },
   options,
@@ -333,7 +320,7 @@ export function HighlightProvider({ children }: { children: ReactNode }) {
         theme: { dark: 'pierre-dark', light: 'pierre-light' },
         // Optional: skip inline line diffs for very long changed lines
         // maxLineDiffLength: 1000,
-        // Optional: pick the Shiki engine ('shiki-js' is default)
+        // Optional: pick the highlighter backend ('shiki-js' is default)
         // preferredHighlighter: 'shiki-wasm',
         // Optionally preload languages to avoid lazy-loading delays
         langs: ['typescript', 'javascript', 'css', 'html'],
@@ -412,7 +399,7 @@ const workerPool = getOrCreateWorkerPoolSingleton({
     theme: { dark: 'pierre-dark', light: 'pierre-light' },
     // Optional: skip inline line diffs for very long changed lines
     // maxLineDiffLength: 1000,
-    // Optional: pick the Shiki engine ('shiki-js' is default)
+    // Optional: pick the highlighter backend ('shiki-js' is default)
     // preferredHighlighter: 'shiki-wasm',
     // Optionally preload languages to avoid lazy-loading delays
     langs: ['typescript', 'javascript', 'css', 'html'],
@@ -474,7 +461,7 @@ new WorkerPoolManager(poolOptions, highlighterOptions)
 //   - lineDiffType?: 'word' | 'word-alt' | 'char' - How to diff lines (default: 'word-alt')
 //   - maxLineDiffLength?: number - Max changed-line length for inline line diffs (default: 1000)
 //   - tokenizeMaxLineLength?: number - Max line length to tokenize (default: 1000)
-//   - preferredHighlighter?: 'shiki-js' | 'shiki-wasm' - Highlighter engine (default: 'shiki-js')
+//   - preferredHighlighter?: 'shiki-js' | 'shiki-wasm' | 'highlights' - Highlighter backend (default: 'shiki-js')
 //   - langs?: SupportedLanguages[] - Array of languages to preload
 
 // Methods:
@@ -641,7 +628,7 @@ export const WORKER_POOL_ARCHITECTURE_ASCII: PreloadFileOptions<
 ┌───┴───────── Worker Threads ────────│───┐
 │ ┌ worker.js ────────────────────────│─┐ │
 │ │ * 8 threads by default            │ │ │
-│ │ * Runs Shiki's codeToHast() ──────┘ │ │
+│ │ * Tokenizes with the backend ────┘ │ │
 │ │ * Manages themes and language       │ │
 │ │   loading automatically             │ │
 │ └─────────────────────────────────────┘ │

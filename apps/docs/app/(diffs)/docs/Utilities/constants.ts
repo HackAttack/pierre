@@ -241,7 +241,7 @@ export const HELPER_DISPOSE_HIGHLIGHTER: PreloadFileOptions<
     name: 'disposeHighlighter.ts',
     contents: `import { disposeHighlighter } from '@pierre/diffs';
 
-// Dispose the shared highlighter instance to free memory.
+// Dispose all shared highlighter instances to free memory.
 // This is useful when you're done rendering diffs and want
 // to clean up resources (e.g., in a single-page app when
 // navigating away from a diff view).
@@ -259,20 +259,19 @@ export const HELPER_GET_SHARED_HIGHLIGHTER: PreloadFileOptions<
 > = {
   file: {
     name: 'getSharedHighlighter.ts',
-    contents: `import { getSharedHighlighter, DiffsHighlighter } from '@pierre/diffs';
+    contents: `import { getSharedHighlighter } from '@pierre/diffs';
 
-// Get the shared Shiki highlighter instance.
-// This is the same instance used internally by all FileDiff
-// and File components. Useful if you need direct access to
-// Shiki for custom highlighting operations.
-//
-// The highlighter is initialized lazily - themes and languages
-// are loaded on demand as you render different files.
-const highlighter: DiffsHighlighter = await getSharedHighlighter();
+// Each backend has its own lazily created shared instance.
+const highlighter = await getSharedHighlighter({
+  preferredHighlighter: 'highlights', // defaults to 'shiki-js'
+  themes: ['pierre-dark'],
+  langs: ['typescript'],
+});
 
-// You can use it directly for custom highlighting, see the Shiki
-// docs at https://shiki.style/ for details
-const tokens = highlighter.codeToTokens('const x = 1;'); `,
+const { tokens } = highlighter.codeToTokens('const x = 1;', {
+  lang: 'typescript',
+  theme: 'pierre-dark',
+});`,
   },
   options,
 };

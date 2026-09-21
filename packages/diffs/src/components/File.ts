@@ -799,6 +799,10 @@ export class File<LAnnotation = undefined, Caret = undefined> {
     }
     const syncEditor = (highlighter: DiffsHighlighter): void => {
       if (
+        highlighter.name !==
+          (this.workerManager?.getPreferredHighlighter() ??
+            this.options.preferredHighlighter ??
+            'shiki-js') ||
         !this.enabled ||
         this.editor !== editor ||
         this.fileContainer !== fileContainer ||
@@ -820,7 +824,13 @@ export class File<LAnnotation = undefined, Caret = undefined> {
     const lang = file.lang ?? getFiletypeFromFileName(file.name);
     // Sync editor synchronously whenever the shared highlighter is ready;
     // otherwise load it and sync once it resolves.
-    const highlighter = getHighlighterIfLoaded({ theme, lang });
+    const highlighter = getHighlighterIfLoaded({
+      theme,
+      lang,
+      preferredHighlighter:
+        this.workerManager?.getPreferredHighlighter() ??
+        this.options.preferredHighlighter,
+    });
     if (highlighter != null) {
       syncEditor(highlighter);
     } else {

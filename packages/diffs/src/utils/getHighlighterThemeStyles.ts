@@ -3,8 +3,8 @@ import { normalizeThemeColors } from '@pierre/theming/color';
 import { DEFAULT_THEMES } from '../constants';
 import type {
   DiffsHighlighter,
+  DiffsTheme,
   DiffsThemeNames,
-  ThemeRegistrationResolved,
   ThemesType,
 } from '../types';
 import { formatCSSVariablePrefix } from './formatCSSVariablePrefix';
@@ -62,10 +62,7 @@ export function getHighlighterThemeStyles({
 // byte-identical to the pre-theming output. Adopting the gutter fallback for
 // diffs is a deliberate follow-up. A variable is omitted entirely when neither
 // source key is present, matching the previous behavior.
-function getGitVariables(
-  themeData: ThemeRegistrationResolved,
-  modePrefix?: string
-) {
+function getGitVariables(themeData: DiffsTheme, modePrefix?: string) {
   modePrefix = modePrefix != null ? `${modePrefix}-` : '';
   let styles = '';
   const additionGreen =

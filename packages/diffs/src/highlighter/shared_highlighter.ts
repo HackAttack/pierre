@@ -1,41 +1,35 @@
-import type { ThemeLoader } from '@pierre/theming';
-import { pierreThemes } from '@pierre/theming/themes';
-import {
-  createHighlighter,
-  createJavaScriptRegexEngine,
-  createOnigurumaEngine,
-} from 'shiki';
-
 import type {
   DiffsHighlighter,
   DiffsThemeNames,
   HighlighterTypes,
   SupportedLanguages,
-  ThemeRegistrationResolved,
   ThemesType,
 } from '../types';
-import type { ResolvedLanguage } from '../worker/types';
-import { areLanguagesAttached } from './languages/areLanguagesAttached';
-import { attachResolvedLanguages } from './languages/attachResolvedLanguages';
 import { cleanUpResolvedLanguages } from './languages/cleanUpResolvedLanguages';
-import { getResolvedOrResolveLanguage } from './languages/getResolvedOrResolveLanguage';
-import { areThemesAttached } from './themes/areThemesAttached';
-import { attachResolvedThemes } from './themes/attachResolvedThemes';
 import { cleanUpResolvedThemes } from './themes/cleanUpResolvedThemes';
-import { getResolvedOrResolveTheme } from './themes/getResolvedOrResolveTheme';
-import { themeResolver } from './themes/themeResolver';
 
-type CachedOrLoadingHighlighterType =
-  | Promise<DiffsHighlighter>
-  | DiffsHighlighter
-  | undefined;
+type CachedHighlighter = DiffsHighlighter | Promise<DiffsHighlighter>;
+const highlighters = new Map<HighlighterTypes, CachedHighlighter>();
 
-let highlighter: CachedOrLoadingHighlighterType;
-
-interface HighlighterOptions {
+export interface HighlighterOptions {
   themes: DiffsThemeNames[];
   langs: SupportedLanguages[];
   preferredHighlighter?: HighlighterTypes;
+}
+
+/** Load only the selected backend and create an independently disposable instance. */
+export async function createHighlighter({
+  preferredHighlighter = 'shiki-js',
+}: {
+  preferredHighlighter?: HighlighterTypes;
+} = {}): Promise<DiffsHighlighter> {
+  if (preferredHighlighter === 'highlights') {
+    const { createHighlightsHighlighter } =
+      await import('./backends/highlights');
+    return createHighlightsHighlighter();
+  }
+  const { createShikiHighlighter } = await import('./backends/shiki');
+  return createShikiHighlighter(preferredHighlighter);
 }
 
 export async function getSharedHighlighter({
@@ -43,91 +37,68 @@ export async function getSharedHighlighter({
   langs,
   preferredHighlighter = 'shiki-js',
 }: HighlighterOptions): Promise<DiffsHighlighter> {
-  highlighter ??= createHighlighter({
-    themes: [],
-    langs: ['text'],
-    engine:
-      preferredHighlighter === 'shiki-wasm'
-        ? createOnigurumaEngine(import('shiki/wasm'))
-        : createJavaScriptRegexEngine(),
-  }) as Promise<DiffsHighlighter>;
-
-  const instance = isHighlighterLoading(highlighter)
-    ? await highlighter
-    : highlighter;
-  highlighter = instance;
-
-  const languageLoaders: Promise<ResolvedLanguage>[] = [];
-  for (const language of Array.from(new Set(langs))) {
-    if (language === 'text' || language === 'ansi') continue;
-    const maybeResolvedLanguage = getResolvedOrResolveLanguage(language);
-    if ('then' in maybeResolvedLanguage) {
-      languageLoaders.push(maybeResolvedLanguage);
-    } else {
-      attachResolvedLanguages(maybeResolvedLanguage, instance);
-    }
+  let cached = highlighters.get(preferredHighlighter);
+  if (cached == null) {
+    cached = createHighlighter({ preferredHighlighter });
+    highlighters.set(preferredHighlighter, cached);
   }
-
-  const themeLoaders: Promise<ThemeRegistrationResolved>[] = [];
-  for (const themeName of themes) {
-    const maybeResolvedTheme = getResolvedOrResolveTheme(themeName);
-    if ('then' in maybeResolvedTheme) {
-      themeLoaders.push(maybeResolvedTheme);
-    } else {
-      attachResolvedThemes(maybeResolvedTheme, highlighter);
-    }
+  let instance: DiffsHighlighter;
+  try {
+    instance = await cached;
+  } catch (error) {
+    if (highlighters.get(preferredHighlighter) === cached)
+      highlighters.delete(preferredHighlighter);
+    throw error;
   }
-
-  // If we need to load any languages or themes, lets do that now
-  if (languageLoaders.length > 0 || themeLoaders.length > 0) {
-    await Promise.all([
-      Promise.all(languageLoaders).then((languages) => {
-        attachResolvedLanguages(languages, instance);
-      }),
-      Promise.all(themeLoaders).then((themes) => {
-        attachResolvedThemes(themes, instance);
-      }),
-    ]);
-  }
-
+  if (highlighters.get(preferredHighlighter) === cached)
+    highlighters.set(preferredHighlighter, instance);
+  await Promise.all([
+    instance.themeResolver.resolveThemes(themes),
+    instance.loadLanguages?.(langs),
+  ]);
   return instance;
 }
 
 export function isHighlighterLoaded(
-  h: CachedOrLoadingHighlighterType = highlighter
+  h: CachedHighlighter | undefined = highlighters.get('shiki-js')
 ): h is DiffsHighlighter {
   return h != null && !('then' in h);
 }
 
 interface GetHighlighterIfLoadedProps {
-  theme: DiffsThemeNames | ThemesType;
-  lang: SupportedLanguages;
+  theme?: DiffsThemeNames | ThemesType;
+  lang?: SupportedLanguages;
+  preferredHighlighter?: HighlighterTypes;
 }
 
-export function getHighlighterIfLoaded(
-  withSettings?: GetHighlighterIfLoadedProps
-): DiffsHighlighter | undefined {
-  if (highlighter == null || 'then' in highlighter) {
+export function getHighlighterIfLoaded({
+  theme,
+  lang,
+  preferredHighlighter = 'shiki-js',
+}: GetHighlighterIfLoadedProps = {}): DiffsHighlighter | undefined {
+  const highlighter = highlighters.get(preferredHighlighter);
+  if (highlighter == null || !isHighlighterLoaded(highlighter))
     return undefined;
-  }
   if (
-    withSettings != null &&
-    (!areThemesAttached(withSettings.theme) ||
-      !areLanguagesAttached(withSettings.lang))
-  ) {
+    theme != null &&
+    !highlighter.themeResolver.hasResolvedThemes(
+      typeof theme === 'string' ? [theme] : Object.values(theme)
+    )
+  )
     return undefined;
-  }
+  if (lang != null && highlighter.hasLoadedLanguages?.([lang]) === false)
+    return undefined;
   return highlighter;
 }
 
 export function isHighlighterLoading(
-  h: CachedOrLoadingHighlighterType = highlighter
+  h: CachedHighlighter | undefined = highlighters.get('shiki-js')
 ): h is Promise<DiffsHighlighter> {
   return h != null && 'then' in h;
 }
 
 export function isHighlighterNull(
-  h: CachedOrLoadingHighlighterType = highlighter
+  h: CachedHighlighter | undefined = highlighters.get('shiki-js')
 ): h is undefined {
   return h == null;
 }
@@ -135,20 +106,27 @@ export function isHighlighterNull(
 export async function preloadHighlighter(
   options: HighlighterOptions
 ): Promise<void> {
-  return void (await getSharedHighlighter(options));
+  await getSharedHighlighter(options);
 }
 
 export async function disposeHighlighter(): Promise<void> {
-  if (highlighter == null) return;
-  (await highlighter).dispose();
+  const cached = [...highlighters.values()];
+  highlighters.clear();
+  // Failed initialization must not prevent other backends and caches from being cleared.
+  const results = await Promise.allSettled(
+    cached.map(async (highlighter) => {
+      let instance: DiffsHighlighter;
+      try {
+        instance = await highlighter;
+      } catch {
+        return;
+      }
+      instance.dispose();
+    })
+  );
   cleanUpResolvedLanguages();
   cleanUpResolvedThemes();
-  highlighter = undefined;
-}
-
-for (const descriptor of pierreThemes.getThemes()) {
-  themeResolver.registerThemeIfAbsent(
-    descriptor.name,
-    descriptor.load as ThemeLoader<ThemeRegistrationResolved>
-  );
+  for (const result of results) {
+    if (result.status === 'rejected') throw result.reason;
+  }
 }

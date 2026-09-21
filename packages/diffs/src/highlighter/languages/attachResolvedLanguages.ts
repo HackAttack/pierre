@@ -1,17 +1,24 @@
 import type { DiffsHighlighter } from '../../types';
 import type { ResolvedLanguage } from '../../worker';
+import {
+  attachedShikiLanguages,
+  shikiInternals,
+} from '../backends/shiki-internals';
 import { AttachedLanguages, ResolvedLanguages } from './constants';
 
 export function attachResolvedLanguages(
   resolvedLanguages: ResolvedLanguage | ResolvedLanguage[],
   highlighter: DiffsHighlighter
 ): void {
-  resolvedLanguages = Array.isArray(resolvedLanguages)
+  if (highlighter.name === 'highlights') return;
+  const raw = shikiInternals.get(highlighter);
+  const attached = attachedShikiLanguages.get(highlighter);
+  if (raw == null || attached == null)
+    throw new Error('Highlighter is disposed');
+  for (const resolvedLang of Array.isArray(resolvedLanguages)
     ? resolvedLanguages
-    : [resolvedLanguages];
-
-  for (const resolvedLang of resolvedLanguages) {
-    if (AttachedLanguages.has(resolvedLang.name)) continue;
+    : [resolvedLanguages]) {
+    if (attached.has(resolvedLang.name)) continue;
     let lang = ResolvedLanguages.get(resolvedLang.name);
     if (lang == null) {
       lang = resolvedLang;
@@ -27,15 +34,15 @@ export function attachResolvedLanguages(
         `attachResolvedLanguages: No returned grammar declares "${lang.name}" as its name or an alias.`
       );
     }
-    highlighter.loadLanguageSync(lang.data);
-    // Shiki can skip an already-loaded grammar, including any newly added aliases.
+    raw.loadLanguageSync(lang.data);
     try {
-      highlighter.getLanguage(lang.name);
+      raw.getLanguage(lang.name);
     } catch {
       throw new Error(
         `attachResolvedLanguages: "${grammar.name}" is already loaded without alias "${lang.name}". Load the alias first or give the grammar a unique name.`
       );
     }
     AttachedLanguages.add(lang.name);
+    attached.add(lang.name);
   }
 }

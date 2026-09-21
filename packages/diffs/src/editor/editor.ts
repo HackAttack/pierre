@@ -1547,6 +1547,13 @@ export class Editor<
     // (rather than the rebuild) keeps an unchanged resumed document, which
     // skips the rebuild, able to paint edits.
     const textDocument = editSession.document;
+    if (
+      this.#tokenizer != null &&
+      this.#tokenizer.highlighter !== highlighter
+    ) {
+      this.#tokenizer.cleanUp();
+      this.#tokenizer = undefined;
+    }
     if (this.#tokenizer == null && textDocument != null) {
       this.#tokenizer = new EditorTokenizer({
         highlighter,

@@ -41,8 +41,8 @@ let instanceId = -1;
 export class FileStream {
   readonly __id: string = `file-stream:${++instanceId}`;
 
-  private highlighter: DiffsHighlighter | undefined;
   private stream: ReadableStream<string> | undefined;
+  private tokenStream: CodeToTokenTransformStream | undefined;
   private abortController: AbortController | undefined;
   private fileContainer: HTMLElement | undefined;
   private pre: HTMLPreElement | undefined;
@@ -61,6 +61,8 @@ export class FileStream {
     dequeueRender(this.render);
     this.abortController?.abort();
     this.abortController = undefined;
+    this.tokenStream?.tokenizer.dispose();
+    this.tokenStream = undefined;
   }
 
   setThemeType(themeType: ThemeTypes): void {
@@ -83,13 +85,6 @@ export class FileStream {
     );
   }
 
-  private async initializeHighlighter(): Promise<DiffsHighlighter> {
-    this.highlighter = await getSharedHighlighter(
-      getHighlighterOptions(this.options.lang, this.options)
-    );
-    return this.highlighter;
-  }
-
   private queuedSetupArgs: [ReadableStream<string>, HTMLElement] | undefined;
   async setup(
     _source: ReadableStream<string>,
@@ -102,14 +97,14 @@ export class FileStream {
       // awaitable, maybe?
       return;
     }
-    this.highlighter ??= await this.initializeHighlighter();
+    const highlighter = await getSharedHighlighter(
+      getHighlighterOptions(this.options.lang, this.options)
+    );
 
     const [source, wrapper] = this.queuedSetupArgs;
     this.queuedSetupArgs = undefined;
 
-    const stream = source;
-
-    this.setupStream(stream, wrapper, this.highlighter);
+    this.setupStream(source, wrapper, highlighter);
   }
 
   private setupStream(
@@ -154,36 +149,28 @@ export class FileStream {
     this.currentLineElement = undefined;
     this.currentLineIndex = this.options.startingLineIndex ?? 1;
     this.abortController?.abort();
+    this.tokenStream?.tokenizer.dispose();
+    this.queuedTokens = [];
     this.abortController = new AbortController();
     const { onStreamStart, onStreamClose, onStreamAbort } = this.options;
     // Cancel the prior source so upstream producers stop generating tokens.
     // Swallow AbortError / locked-stream rejections since we're tearing down.
     this.stream?.cancel().catch(() => {});
     this.stream = stream;
+    // Disable timed tokenization aborts; long lines have a separate limit.
+    const tokenStream = new CodeToTokenTransformStream({
+      lang: this.options.lang ?? 'text',
+      ...(typeof theme === 'string' ? { theme } : { themes: theme }),
+      highlighter,
+      allowRecalls: true,
+      defaultColor: false,
+      cssVariablePrefix: formatCSSVariablePrefix('token'),
+      tokenizeMaxLineLength: this.options.tokenizeMaxLineLength,
+      tokenizeTimeLimit: 0,
+    });
+    this.tokenStream = tokenStream;
     this.stream
-      // tokenizeTimeLimit: 0 — never trade silently-wrong token colors for
-      // latency; see renderFileWithHighlighter for the full rationale.
-      .pipeThrough(
-        typeof theme === 'string'
-          ? new CodeToTokenTransformStream({
-              ...this.options,
-              theme,
-              highlighter,
-              allowRecalls: true,
-              defaultColor: false,
-              cssVariablePrefix: formatCSSVariablePrefix('token'),
-              tokenizeTimeLimit: 0,
-            })
-          : new CodeToTokenTransformStream({
-              ...this.options,
-              themes: theme,
-              highlighter,
-              allowRecalls: true,
-              defaultColor: false,
-              cssVariablePrefix: formatCSSVariablePrefix('token'),
-              tokenizeTimeLimit: 0,
-            })
-      )
+      .pipeThrough(tokenStream)
       .pipeTo(
         new WritableStream({
           start(controller) {
@@ -204,7 +191,8 @@ export class FileStream {
         if (error.name !== 'AbortError') {
           console.error('FileStream pipe error:', error);
         }
-      });
+      })
+      .finally(() => tokenStream.tokenizer.dispose());
   }
 
   private queuedTokens: (ThemedToken | RecallToken)[] = [];
