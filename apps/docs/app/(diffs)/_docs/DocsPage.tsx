@@ -204,6 +204,7 @@ export default function DocsPage() {
           <InstallationSection />
           <BuildWithAgentsSection />
           <CoreTypesSection />
+          <HighlightersSection />
           <ReactAPISection />
           <VanillaAPISection />
           <CodeViewSection />
@@ -288,6 +289,13 @@ async function CoreTypesSection() {
       parseDiffFromFileExample,
       parsePatchFilesExample,
     },
+  });
+  return <ProseWrapper>{content}</ProseWrapper>;
+}
+
+async function HighlightersSection() {
+  const content = await renderMDX({
+    filePath: '(diffs)/docs/Highlighters/content.mdx',
   });
   return <ProseWrapper>{content}</ProseWrapper>;
 }
