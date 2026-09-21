@@ -92,6 +92,46 @@ function assertMatchesFresh(
   }
 }
 
+void t.test(
+  'LiveTokenizer: lexer regressions survive restoring state before an edited line',
+  () => {
+    for (const [lang, code] of [
+      ['js', 'import {x}\nfrom\n "m";\nconst value = 1;\n'],
+      ['ts', 'export\ntype\n Result = string;\n'],
+      ['ts', 'type\n= value;\n'],
+      ['tsx', 'let type;\ntype\n= value;\n'],
+      ['tsrx', 'if (ready) {}\ntype\n= value;\n'],
+      ['css', 'a {\ncolor:red\n; }'],
+      ['css', '@media screen {\nh1\n { color: red; } }'],
+      ['elm', 'import List\nmain = 1\n'],
+      ['batch', 'for %%A in (*) do (\necho "%%~fA_suffix"\n)\n'],
+    ] as const) {
+      const live = new LiveTokenizer({ lang, code, theme: pierreDark });
+      try {
+        assertMatchesFresh(live, code, lang, 'initial');
+        live.applyEdits([
+          {
+            range: {
+              start: { line: 1, character: 0 },
+              end: { line: 1, character: 0 },
+            },
+            newText: ' ',
+          },
+        ]);
+        const at = code.indexOf('\n') + 1;
+        assertMatchesFresh(
+          live,
+          code.slice(0, at) + ' ' + code.slice(at),
+          lang,
+          'edited'
+        );
+      } finally {
+        live.dispose();
+      }
+    }
+  }
+);
+
 const editTexts = [
   '',
   'x',
