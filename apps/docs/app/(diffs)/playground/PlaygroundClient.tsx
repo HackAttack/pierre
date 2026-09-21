@@ -29,6 +29,7 @@ import {
 import type { PreloadFileDiffResult } from '@pierre/diffs/ssr';
 import {
   IconBrandGithub,
+  IconBrush,
   IconCheck,
   IconChevronSm,
   IconCiWarning,
@@ -332,6 +333,7 @@ function PlaygroundControlsContent({
               aria-label="Highlighter"
               className="justify-start px-3"
             >
+              <IconBrush aria-hidden="true" />
               {HIGHLIGHTER_LABELS[highlighter]}
               <IconChevronSm className="text-muted-foreground ml-auto" />
             </Button>
