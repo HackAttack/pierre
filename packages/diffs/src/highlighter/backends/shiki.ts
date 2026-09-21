@@ -70,8 +70,7 @@ export async function createShikiHighlighter(
       return tokensToHtml(highlighter.codeToTokens(code, options), options);
     },
     createLiveTokenizer(options) {
-      highlighter.getTheme(options.theme);
-      return new ShikiLiveTokenizer(raw, options, highlighter.loadLanguages);
+      return new ShikiLiveTokenizer(raw, options, highlighter);
     },
     createStreamTokenizer(options) {
       return new ShikiStreamTokenizer(raw, resolveOptions(options));

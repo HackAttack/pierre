@@ -35,20 +35,21 @@ export interface DecorationItem {
   alwaysWrap?: boolean;
 }
 
-export interface CodeToTokensOptions {
+export type CodeToTokensOptions = {
   lang: string;
-  theme?: string;
-  themes?: Record<string, string>;
   defaultColor?: string | false;
   cssVariablePrefix?: string;
   tokenizeMaxLineLength?: number;
   tokenizeTimeLimit?: number;
   mergeWhitespaces?: 'never' | 'always';
-}
+} & (
+  | { theme: string; themes?: undefined }
+  | { theme?: undefined; themes: Record<string, string> }
+);
 
-export interface CodeToHtmlOptions extends CodeToTokensOptions {
+export type CodeToHtmlOptions = CodeToTokensOptions & {
   decorations?: DecorationItem[];
-}
+};
 
 export interface TokensResult {
   tokens: ThemedToken[][];

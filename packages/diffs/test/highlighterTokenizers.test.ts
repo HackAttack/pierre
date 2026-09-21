@@ -2,6 +2,7 @@ import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 
 import { TextDocument } from '../src/editor/textDocument';
 import {
+  createHighlighter,
   disposeHighlighter,
   getSharedHighlighter,
 } from '../src/highlighter/shared_highlighter';
@@ -16,6 +17,51 @@ describe('backend tokenizers', () => {
     'shiki-wasm',
     'highlights',
   ] as const) {
+    test(`${preferredHighlighter} switches live tokenizers to a resolved theme`, async () => {
+      const highlighter = await createHighlighter({ preferredHighlighter });
+      await highlighter.themeResolver.resolveThemes([
+        'pierre-dark',
+        'pierre-light',
+      ]);
+      await highlighter.loadLanguages?.(['typescript']);
+      const document = new TextDocument(
+        'test.ts',
+        'const value = 1;',
+        'typescript'
+      );
+      const tokenizer = highlighter.createLiveTokenizer({
+        textDocument: document,
+        theme: 'pierre-dark',
+        onDeferTokenize: () => {},
+      });
+      try {
+        for (const theme of ['pierre-light', 'pierre-dark']) {
+          tokenizer.setTheme(theme);
+          const change = document.applyEdits([
+            {
+              range: {
+                start: { line: 0, character: 14 },
+                end: { line: 0, character: 15 },
+              },
+              newText: theme === 'pierre-light' ? '2' : '3',
+            },
+          ]);
+          const tokens = tokenizer.tokenize(change!).get(0);
+          const expected = highlighter.codeToTokens(document.getText(), {
+            lang: 'typescript',
+            theme,
+          });
+          expect(tokens?.map((token) => token[2]).join('')).toBe(
+            document.getText()
+          );
+          expect(tokens?.[0]?.[1]).toBe(expected.tokens[0][0].color);
+        }
+      } finally {
+        tokenizer.dispose();
+        highlighter.dispose();
+      }
+    });
+
     test(`${preferredHighlighter} disposes cancelled and aborted stream tokenizers`, async () => {
       const highlighter = await getSharedHighlighter({
         preferredHighlighter,

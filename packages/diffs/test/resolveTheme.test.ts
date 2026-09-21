@@ -96,7 +96,7 @@ describe('backend theme resolution', () => {
     }
   });
 
-  test('selects each backend palette from a default-exported Diffs theme', async () => {
+  test('preserves shared colors and both palettes in a default-exported Diffs theme', async () => {
     const { normalizeTheme } = await import('shiki/core');
     const { registerCustomTheme } =
       await import('../src/highlighter/themes/registerCustomTheme');
@@ -109,6 +109,8 @@ describe('backend theme resolution', () => {
       colors: {
         'editor.foreground': '#ddeeff',
         'editor.background': '#001122',
+        'editor.selectionBackground': '#abcdef',
+        'editorCursor.foreground': '#fedcba',
       },
       textmate: normalizeTheme({
         name,
@@ -131,15 +133,15 @@ describe('backend theme resolution', () => {
       'diffs'
     );
     try {
-      const textmate = await resolveTheme(name, 'shiki-js');
-      const zed = await resolveTheme(name, 'highlights');
-      expect(textmate.fg).toBe('#112233');
-      expect(textmate.bg).toBe('#ffffff');
-      expect(textmate.textmate).toBeDefined();
-      expect(zed.fg).toBe('#ddeeff');
-      expect(zed.bg).toBe('#001122');
-      expect(zed.zed?.name).toBe(name);
-      expect(textmate).not.toBe(zed);
+      for (const backend of ['shiki-js', 'shiki-wasm', 'highlights'] as const) {
+        const theme = await resolveTheme(name, backend);
+        expect(theme.type).toBe(portable.type);
+        expect(theme.fg).toBe(portable.fg);
+        expect(theme.bg).toBe(portable.bg);
+        expect(theme.colors).toEqual(portable.colors);
+        expect(theme.textmate).toEqual(portable.textmate);
+        expect(theme.zed).toEqual(portable.zed);
+      }
     } finally {
       customThemes.delete(name);
     }

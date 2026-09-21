@@ -13,6 +13,7 @@ import type {
   DiffsLiveTokenizer,
   DiffsLiveTokenizerOptions,
 } from './tokenizer-types';
+import type { DiffsHighlighter } from './types';
 
 // A cold regex engine can exceed a deadline and return an incomplete state.
 // Bound work by line length and background slices instead of accepting it.
@@ -65,7 +66,7 @@ export class ShikiLiveTokenizer implements DiffsLiveTokenizer {
       this.#grammar === undefined &&
       !isGrammarlessLanguage(this.#textDocument.languageId)
     ) {
-      await this.loadLanguages?.([this.#textDocument.languageId]);
+      await this.backend?.loadLanguages?.([this.#textDocument.languageId]);
       if (this.#isCleanedUp) {
         return;
       }
@@ -126,9 +127,10 @@ export class ShikiLiveTokenizer implements DiffsLiveTokenizer {
   constructor(
     highlighter: HighlighterCore,
     options: DiffsLiveTokenizerOptions,
-    private readonly loadLanguages?: (
-      languages: readonly string[]
-    ) => Promise<void>
+    private readonly backend?: Pick<
+      DiffsHighlighter,
+      'getTheme' | 'loadLanguages'
+    >
   ) {
     this.#highlighter = highlighter;
     this.#textDocument = options.textDocument;
@@ -169,6 +171,8 @@ export class ShikiLiveTokenizer implements DiffsLiveTokenizer {
     if (this.#themeName === '') {
       return;
     }
+    // Resolving a theme does not attach it to Shiki until the backend uses it.
+    this.backend?.getTheme(this.#themeName);
     const { colorMap } = this.#highlighter.setTheme(this.#themeName);
     this.#colorMap = colorMap;
   }

@@ -121,6 +121,66 @@ export function renderTokenLines(
       });
     let column = 0;
     const decorationStack: { decoration: LineDecoration; node: Element }[] = [];
+    const emptyPositions = new Set<number>();
+    const lineLength =
+      spans.length === 0
+        ? 0
+        : normalized.reduce(
+            (length, token) => length + token.content.length,
+            0
+          );
+    if (spans.length > 0) {
+      for (const span of spans) {
+        const from = span.start.line === lineIndex ? span.start.character : 0;
+        const to =
+          span.end.line === lineIndex ? span.end.character : lineLength;
+        if (from === to && from >= 0 && from <= lineLength)
+          emptyPositions.add(from);
+      }
+    }
+
+    // Share the range stack for text and empty markers so both keep their
+    // enclosing decorations without splitting an existing wrapper.
+    const appendDecoratedNode = (
+      node: Element | undefined,
+      from: number,
+      to: number
+    ): void => {
+      let parent = line;
+      let depth = 0;
+      for (const decoration of spans) {
+        const rangeStart =
+          decoration.start.line === lineIndex ? decoration.start.character : 0;
+        const rangeEnd =
+          decoration.end.line === lineIndex
+            ? decoration.end.character
+            : lineLength;
+        if (
+          rangeStart > from ||
+          rangeEnd < to ||
+          // Boundary markers join the following range, except at the line end.
+          (from === to &&
+            from < lineLength &&
+            rangeStart < from &&
+            rangeEnd === from)
+        )
+          continue;
+        if (decorationStack[depth]?.decoration !== decoration) {
+          decorationStack.length = depth;
+          const wrapper: Element = {
+            type: 'element',
+            tagName: 'span',
+            properties: { ...decoration.properties },
+            children: [],
+          };
+          parent.children.push(wrapper);
+          decorationStack.push({ decoration, node: wrapper });
+        }
+        parent = decorationStack[depth++].node;
+      }
+      decorationStack.length = depth;
+      if (node != null) parent.children.push(node);
+    };
     for (const token of normalized) {
       if (token.content === '') continue;
       const start = column;
@@ -146,6 +206,8 @@ export function renderTokenLines(
         const from = boundaries[i - 1];
         const to = boundaries[i];
         if (from === to) continue;
+        if (emptyPositions.delete(from))
+          appendDecoratedNode(undefined, from, from);
         const node: Element = {
           type: 'element',
           tagName: 'span',
@@ -161,34 +223,13 @@ export function renderTokenLines(
             },
           ],
         };
-        let parent = line;
-        let depth = 0;
-        for (const decoration of spans) {
-          if (
-            (decoration.start.line === lineIndex &&
-              decoration.start.character > from) ||
-            (decoration.end.line === lineIndex && decoration.end.character < to)
-          )
-            continue;
-          if (decorationStack[depth]?.decoration !== decoration) {
-            decorationStack.length = depth;
-            const wrapper: Element = {
-              type: 'element',
-              tagName: 'span',
-              properties: { ...decoration.properties },
-              children: [],
-            };
-            parent.children.push(wrapper);
-            decorationStack.push({ decoration, node: wrapper });
-          }
-          parent = decorationStack[depth++].node;
-        }
-        decorationStack.length = depth;
-        parent.children.push(node);
+        appendDecoratedNode(node, from, to);
       }
       column = end;
     }
-    if (useTokenTransformer && line.children.length === 0) {
+    if (emptyPositions.delete(column))
+      appendDecoratedNode(undefined, column, column);
+    if (useTokenTransformer && column === 0) {
       line.children.push({
         type: 'element',
         tagName: 'br',

@@ -148,6 +148,8 @@ export class FileStream {
     this.currentRowCount = 0;
     this.currentLineElement = undefined;
     this.currentLineIndex = this.options.startingLineIndex ?? 1;
+    this.pendingCarriageReturn = false;
+    this.streamClosed = false;
     this.abortController?.abort();
     this.tokenStream?.tokenizer.dispose();
     this.queuedTokens = [];
@@ -176,7 +178,11 @@ export class FileStream {
           start(controller) {
             onStreamStart?.(controller);
           },
-          close() {
+          close: () => {
+            if (this.tokenStream === tokenStream) {
+              this.streamClosed = true;
+              queueRender(this.render);
+            }
             onStreamClose?.();
           },
           abort(reason) {
@@ -210,11 +216,19 @@ export class FileStream {
 
   private currentLineIndex: number;
   private currentLineElement: HTMLElement | undefined;
+  private pendingCarriageReturn = false;
+  private streamClosed = false;
   private render = () => {
     this.options.onPreRender?.(this);
     const { gutter, content } = this.getOrCreateStreamColumns();
     const gutterFragment = document.createDocumentFragment();
     const contentFragment = document.createDocumentFragment();
+    // Stage rows from ordinary newlines, lone carriage returns, and stream close.
+    const appendLine = () => {
+      const { gutterLine, contentLine } = this.createLine();
+      gutterFragment.appendChild(gutterLine);
+      contentFragment.appendChild(contentLine);
+    };
     for (const token of this.queuedTokens) {
       if ('recall' in token) {
         if (this.currentLineElement == null) {
@@ -230,21 +244,29 @@ export class FileStream {
         for (let i = 0; i < token.recall; i++) {
           this.currentLineElement.lastChild?.remove();
         }
+        if (token.recall > 0) this.pendingCarriageReturn = false;
       } else {
         const span = createSpanFromToken(token);
-        if (this.currentLineElement == null) {
-          const { gutterLine, contentLine } = this.createLine();
-          gutterFragment.appendChild(gutterLine);
-          contentFragment.appendChild(contentLine);
+        // Keep a provisional CR on its current row until the next token so
+        // recalls can remove it and a following LF advances the row only once.
+        if (this.pendingCarriageReturn && token.content !== '\n') {
+          this.currentLineIndex++;
+          appendLine();
+        } else if (this.currentLineElement == null) {
+          appendLine();
         }
         this.currentLineElement?.appendChild(span);
+        this.pendingCarriageReturn = token.content === '\r';
         if (token.content === '\n') {
           this.currentLineIndex++;
-          const { gutterLine, contentLine } = this.createLine();
-          gutterFragment.appendChild(gutterLine);
-          contentFragment.appendChild(contentLine);
+          appendLine();
         }
       }
+    }
+    if (this.streamClosed && this.pendingCarriageReturn) {
+      this.pendingCarriageReturn = false;
+      this.currentLineIndex++;
+      appendLine();
     }
     if (gutterFragment.childNodes.length > 0) {
       gutter.appendChild(gutterFragment);

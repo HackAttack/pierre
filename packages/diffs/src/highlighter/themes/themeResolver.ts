@@ -199,11 +199,10 @@ export function createDiffsThemeResolver(
             ),
           };
         }
-        const textmate = normalizeTheme(
-          'textmate' in loaded && loaded.textmate !== undefined
-            ? loaded.textmate
-            : loaded
-        );
+        if ('textmate' in loaded && loaded.textmate !== undefined) {
+          return { ...loaded, textmate: normalizeTheme(loaded.textmate) };
+        }
+        const textmate = normalizeTheme(loaded);
         return {
           name: textmate.name,
           type: textmate.type,
