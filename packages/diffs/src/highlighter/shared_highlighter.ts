@@ -11,6 +11,9 @@ import { cleanUpResolvedThemes } from './themes/cleanUpResolvedThemes';
 type CachedHighlighter = DiffsHighlighter | Promise<DiffsHighlighter>;
 const highlighters = new Map<HighlighterTypes, CachedHighlighter>();
 
+/** A backend's cache slot by name, or a cached instance or promise directly. */
+type HighlighterState = HighlighterTypes | CachedHighlighter | undefined;
+
 export interface HighlighterOptions {
   themes: DiffsThemeNames[];
   langs: SupportedLanguages[];
@@ -59,10 +62,30 @@ export async function getSharedHighlighter({
   return instance;
 }
 
+function getCachedHighlighter(
+  state: HighlighterState
+): CachedHighlighter | undefined {
+  return typeof state === 'string' ? highlighters.get(state) : state;
+}
+
+function isLoadedInstance(
+  cached: CachedHighlighter | undefined
+): cached is DiffsHighlighter {
+  return cached != null && !('then' in cached);
+}
+
+/**
+ * Whether a backend's shared instance is ready. Pass the backend name to
+ * check a backend other than the default `shiki-js`.
+ */
 export function isHighlighterLoaded(
-  h: CachedHighlighter | undefined = highlighters.get('shiki-js')
-): h is DiffsHighlighter {
-  return h != null && !('then' in h);
+  h: CachedHighlighter | undefined
+): h is DiffsHighlighter;
+export function isHighlighterLoaded(backend?: HighlighterTypes): boolean;
+export function isHighlighterLoaded(
+  state: HighlighterState = 'shiki-js'
+): boolean {
+  return isLoadedInstance(getCachedHighlighter(state));
 }
 
 interface GetHighlighterIfLoadedProps {
@@ -77,8 +100,7 @@ export function getHighlighterIfLoaded({
   preferredHighlighter = 'shiki-js',
 }: GetHighlighterIfLoadedProps = {}): DiffsHighlighter | undefined {
   const highlighter = highlighters.get(preferredHighlighter);
-  if (highlighter == null || !isHighlighterLoaded(highlighter))
-    return undefined;
+  if (!isLoadedInstance(highlighter)) return undefined;
   if (
     theme != null &&
     !highlighter.themeResolver.hasResolvedThemes(
@@ -91,16 +113,27 @@ export function getHighlighterIfLoaded({
   return highlighter;
 }
 
+/** Whether a backend's shared instance is still initializing. */
 export function isHighlighterLoading(
-  h: CachedHighlighter | undefined = highlighters.get('shiki-js')
-): h is Promise<DiffsHighlighter> {
-  return h != null && 'then' in h;
+  h: CachedHighlighter | undefined
+): h is Promise<DiffsHighlighter>;
+export function isHighlighterLoading(backend?: HighlighterTypes): boolean;
+export function isHighlighterLoading(
+  state: HighlighterState = 'shiki-js'
+): boolean {
+  const cached = getCachedHighlighter(state);
+  return cached != null && 'then' in cached;
 }
 
+/** Whether a backend has neither a shared instance nor one loading. */
 export function isHighlighterNull(
-  h: CachedHighlighter | undefined = highlighters.get('shiki-js')
-): h is undefined {
-  return h == null;
+  h: CachedHighlighter | undefined
+): h is undefined;
+export function isHighlighterNull(backend?: HighlighterTypes): boolean;
+export function isHighlighterNull(
+  state: HighlighterState = 'shiki-js'
+): boolean {
+  return getCachedHighlighter(state) == null;
 }
 
 export async function preloadHighlighter(
@@ -109,6 +142,11 @@ export async function preloadHighlighter(
   await getSharedHighlighter(options);
 }
 
+/**
+ * Dispose every shared instance and clear the shared theme and language
+ * caches. Instances created with createHighlighter() are not disposed and
+ * keep the themes and grammars they have already used.
+ */
 export async function disposeHighlighter(): Promise<void> {
   const cached = [...highlighters.values()];
   highlighters.clear();

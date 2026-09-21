@@ -81,6 +81,7 @@ import { isFilePlainText } from '../utils/isFilePlainText';
 import { isStyleNode } from '../utils/isStyleNode';
 import { isSafari } from '../utils/platform';
 import { prerenderHTMLIfNecessary } from '../utils/prerenderHTMLIfNecessary';
+import { resolvePreferredHighlighter } from '../utils/resolvePreferredHighlighter';
 import { getMeasuredScrollbarGutter } from '../utils/scrollbarGutter';
 import { setPreNodeProperties } from '../utils/setWrapperNodeProps';
 import type { WorkerPoolManager } from '../worker';
@@ -800,9 +801,7 @@ export class File<LAnnotation = undefined, Caret = undefined> {
     const syncEditor = (highlighter: DiffsHighlighter): void => {
       if (
         highlighter.name !==
-          (this.workerManager?.getPreferredHighlighter() ??
-            this.options.preferredHighlighter ??
-            'shiki-js') ||
+          resolvePreferredHighlighter(this.workerManager, this.options) ||
         !this.enabled ||
         this.editor !== editor ||
         this.fileContainer !== fileContainer ||
@@ -827,9 +826,10 @@ export class File<LAnnotation = undefined, Caret = undefined> {
     const highlighter = getHighlighterIfLoaded({
       theme,
       lang,
-      preferredHighlighter:
-        this.workerManager?.getPreferredHighlighter() ??
-        this.options.preferredHighlighter,
+      preferredHighlighter: resolvePreferredHighlighter(
+        this.workerManager,
+        this.options
+      ),
     });
     if (highlighter != null) {
       syncEditor(highlighter);
@@ -837,9 +837,10 @@ export class File<LAnnotation = undefined, Caret = undefined> {
       void getSharedHighlighter({
         themes: getThemes(theme),
         langs: Array.from(new Set(['text', lang])),
-        preferredHighlighter:
-          this.workerManager?.getPreferredHighlighter() ??
-          this.options.preferredHighlighter,
+        preferredHighlighter: resolvePreferredHighlighter(
+          this.workerManager,
+          this.options
+        ),
       }).then(syncEditor);
     }
   }

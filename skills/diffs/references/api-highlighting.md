@@ -23,20 +23,20 @@ const html = highlighter.codeToHtml('const value = 1;', {
 
 `DiffsHighlighter` owns `name`, `themeResolver`, `getTheme`, `codeToHtml`,
 `codeToTokens`, `createLiveTokenizer`, `createStreamTokenizer`, and `dispose`.
-Shiki implementations also expose optional `loadLanguages` and
-`hasLoadedLanguages` methods. Import backend-specific Shiki APIs and types from
-`shiki` directly.
+Shiki implementations also expose optional `loadLanguages`,
+`hasLoadedLanguages`, and `attachLanguages` methods. Import backend-specific
+Shiki APIs and types from `shiki` directly.
 
-| Export                                                             | Purpose                                                           |
-| ------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| `getSharedHighlighter`                                             | Gets or creates the selected backend and loads themes/languages.  |
-| `preloadHighlighter`                                               | Loads the same settings before a render.                          |
-| `getHighlighterIfLoaded`                                           | Gets a loaded instance when its requested settings are available. |
-| `isHighlighterLoaded`, `isHighlighterLoading`, `isHighlighterNull` | Inspect cached highlighter state.                                 |
-| `disposeHighlighter`                                               | Disposes shared backend resources and clears resolved caches.     |
-| `getHighlighterOptions`                                            | Converts component options to highlighter input.                  |
-| `getHighlighterThemeStyles`                                        | Creates component CSS from a loaded theme.                        |
-| `getThemes`                                                        | Converts a theme name or light/dark pair to a name list.          |
+| Export                                                             | Purpose                                                                                                                 |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `getSharedHighlighter`                                             | Gets or creates the selected backend and loads themes/languages.                                                        |
+| `preloadHighlighter`                                               | Loads the same settings before a render.                                                                                |
+| `getHighlighterIfLoaded`                                           | Gets a loaded instance when its requested settings are available.                                                       |
+| `isHighlighterLoaded`, `isHighlighterLoading`, `isHighlighterNull` | Inspect a backend's cached state; pass a backend name (default `'shiki-js'`).                                           |
+| `disposeHighlighter`                                               | Disposes shared instances and clears resolved caches; retained `createHighlighter` instances keep the themes they used. |
+| `getHighlighterOptions`                                            | Converts component options to highlighter input.                                                                        |
+| `getHighlighterThemeStyles`                                        | Creates component CSS from a loaded theme.                                                                              |
+| `getThemes`                                                        | Converts a theme name or light/dark pair to a name list.                                                                |
 
 ## Themes
 
@@ -44,16 +44,22 @@ Shiki implementations also expose optional `loadLanguages` and
 backend syntax data: `textmate` for Shiki and `zed` for Highlights. Bundled
 Pierre and Shiki theme names also resolve to bundled Highlights palettes.
 
-| Export                                                                | Purpose                                                                                    |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `registerCustomTheme(name, loader, type = 'textmate')`                | Registers a loader with type `'textmate'` for Shiki or `'zed'` for Highlights.             |
-| `createCSSVariablesTheme`                                             | Creates a portable palette; accepts name, variablePrefix, variableDefaults, and fontStyle. |
-| `registerCustomCSSVariableTheme`                                      | Preserves `(name, variableDefaults, fontStyle = false)` and the `--diffs-` prefix.         |
-| `resolveTheme`, `resolveThemes`                                       | Resolve themes; optional second argument selects the backend.                              |
-| `getResolvedOrResolveTheme`, `getResolvedThemes`, `hasResolvedThemes` | Read or populate the selected backend's cache.                                             |
-| `attachResolvedThemes`                                                | Seeds resolved themes into a highlighter, including worker instances.                      |
-| `areThemesAttached`                                                   | Checks cached themes; optionally takes a backend name or highlighter.                      |
-| `cleanUpResolvedThemes`                                               | Clears caches, preserving registrations.                                                   |
+| Export                                                                | Purpose                                                                                                         |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `registerCustomTheme(name, loader, type = 'textmate')`                | Registers a loader with type `'textmate'` for Shiki or `'zed'` for Highlights.                                  |
+| `createCSSVariablesTheme`                                             | Creates a portable palette; accepts name, variablePrefix (default `--diffs-`), variableDefaults, and fontStyle. |
+| `registerCustomCSSVariableTheme`                                      | Preserves `(name, variableDefaults, fontStyle = false)` and the `--diffs-` prefix.                              |
+| `resolveTheme`, `resolveThemes`                                       | Resolve themes; optional second argument selects the backend.                                                   |
+| `getResolvedOrResolveTheme`, `getResolvedThemes`, `hasResolvedThemes` | Read or populate the selected backend's cache.                                                                  |
+| `attachResolvedThemes`                                                | Seeds resolved themes into a highlighter, including worker instances.                                           |
+| `areThemesAttached`                                                   | Checks cached themes; optionally takes a backend name or highlighter.                                           |
+| `cleanUpResolvedThemes`                                               | Clears caches, preserving registrations.                                                                        |
+
+`createCSSVariablesTheme` previously re-exported Shiki's
+`createCssVariablesTheme`, whose default prefix is `--shiki-` and whose result
+is a raw Shiki registration. Pass `variablePrefix: '--shiki-'` to keep
+stylesheets written for that default, or import Shiki's helper directly when a
+raw registration is needed.
 
 Loaders return a theme directly or as a module's `default` export. Zed themes
 use the registered name instead of their display name and require

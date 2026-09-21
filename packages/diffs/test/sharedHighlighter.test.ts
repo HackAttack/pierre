@@ -3,9 +3,13 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { RegisteredCustomLanguages } from '../src/highlighter/languages/constants';
 import { registerCustomLanguage } from '../src/highlighter/languages/registerCustomLanguage';
 import {
+  createHighlighter,
   disposeHighlighter,
   getHighlighterIfLoaded,
   getSharedHighlighter,
+  isHighlighterLoaded,
+  isHighlighterLoading,
+  isHighlighterNull,
 } from '../src/highlighter/shared_highlighter';
 
 const backends = ['shiki-js', 'shiki-wasm', 'highlights'] as const;
@@ -103,4 +107,58 @@ describe('shared highlighter backend lifecycle', () => {
         .join('')
     ).toBe('custom text');
   });
+});
+
+describe('shared highlighter cache state', () => {
+  test('load-state predicates inspect the requested backend', async () => {
+    expect(isHighlighterNull('highlights')).toBe(true);
+    const loading = getSharedHighlighter({
+      themes: [],
+      langs: [],
+      preferredHighlighter: 'highlights',
+    });
+    expect(isHighlighterLoading('highlights')).toBe(true);
+    expect(isHighlighterLoaded('highlights')).toBe(false);
+    await loading;
+    expect(isHighlighterLoaded('highlights')).toBe(true);
+    expect(isHighlighterLoading('highlights')).toBe(false);
+    expect(isHighlighterNull('highlights')).toBe(false);
+    // The default backend stays cold.
+    expect(isHighlighterLoaded()).toBe(false);
+    expect(isHighlighterLoading()).toBe(false);
+    expect(isHighlighterNull()).toBe(true);
+  });
+
+  for (const preferredHighlighter of backends) {
+    test(`${preferredHighlighter} retained instances keep used themes after disposeHighlighter`, async () => {
+      const highlighter = await createHighlighter({ preferredHighlighter });
+      try {
+        await Promise.all([
+          highlighter.themeResolver.resolveThemes([
+            'pierre-dark',
+            'pierre-light',
+          ]),
+          highlighter.loadLanguages?.(['typescript']),
+        ]);
+        const theme = highlighter.getTheme('pierre-dark');
+        await disposeHighlighter();
+        expect(
+          highlighter.themeResolver.hasResolvedThemes(['pierre-dark'])
+        ).toBe(false);
+        expect(highlighter.getTheme('pierre-dark')).toBe(theme);
+        const tokens = highlighter.codeToTokens('const value = 1;', {
+          lang: 'typescript',
+          theme: 'pierre-dark',
+        });
+        expect(tokens.tokens[0].some((token) => token.color != null)).toBe(
+          true
+        );
+        expect(() => highlighter.getTheme('pierre-light')).toThrow(
+          'has not been resolved'
+        );
+      } finally {
+        highlighter.dispose();
+      }
+    });
+  }
 });

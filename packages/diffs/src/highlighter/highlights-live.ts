@@ -16,10 +16,19 @@ import type { CodeToTokensOptions } from './types';
 export class HighlightsLiveTokenizer implements DiffsLiveTokenizer {
   #tokenizer: LiveTokenizer;
   #version: number;
+  #disposed = false;
   // Lines the in-progress tokenize call returns itself. A synchronous flush
   // must not also deliver them through onDeferTokenize, or the host patches
   // the same rows twice.
   #returnedRange: readonly [start: number, end: number] | undefined;
+  // Whether the native tokenizer's background work is paused. Every flush,
+  // edit and reset resumes it, so reads that flush restore the pause after.
+  #paused = false;
+  // While a bracket-matching read runs, lines the native tokenizer completes
+  // collect here instead of reaching the host from inside the read.
+  #capturedLines: Map<number, HighlightedToken[]> | undefined;
+  // Captured lines waiting for the microtask that hands them to the host.
+  #pendingDelivery: Map<number, HighlightedToken[]> | undefined;
 
   constructor(
     private readonly options: DiffsLiveTokenizerOptions,
@@ -45,8 +54,14 @@ export class HighlightsLiveTokenizer implements DiffsLiveTokenizer {
   }
 
   // Forward background and off-range lines to the host, minus the rows the
-  // current tokenize call already returns.
+  // current tokenize call already returns. Lines completed by a
+  // bracket-matching read are held back until that read has returned.
   #deliver(lines: Map<number, HighlightedToken[]>): void {
+    const captured = this.#capturedLines;
+    if (captured !== undefined) {
+      for (const [line, tokens] of lines) captured.set(line, tokens);
+      return;
+    }
     const range = this.#returnedRange;
     if (range !== undefined) {
       for (const line of lines.keys()) {
@@ -55,6 +70,26 @@ export class HighlightsLiveTokenizer implements DiffsLiveTokenizer {
       if (lines.size === 0) return;
     }
     this.options.onDeferTokenize(lines);
+  }
+
+  // Hand lines completed during a read to the host once the current task
+  // ends, so the host's row patching cannot re-enter the selection render
+  // that asked for bracket ranges. Edits, resets and theme changes before
+  // then renumber or recolor lines and drop the batch; their own deliveries
+  // and the next viewport read cover those rows.
+  #queueDelivery(lines: Map<number, HighlightedToken[]>): void {
+    const pending = this.#pendingDelivery;
+    if (pending !== undefined) {
+      for (const [line, tokens] of lines) pending.set(line, tokens);
+      return;
+    }
+    this.#pendingDelivery = lines;
+    queueMicrotask(() => {
+      const batch = this.#pendingDelivery;
+      this.#pendingDelivery = undefined;
+      if (batch !== undefined && batch.size > 0 && !this.#disposed)
+        this.options.onDeferTokenize(batch);
+    });
   }
 
   tokenize(
@@ -69,17 +104,23 @@ export class HighlightsLiveTokenizer implements DiffsLiveTokenizer {
       document.lineCount
     );
     const returnedStart = Math.max(start, change.startLine);
+    // Edits, resets and flushes all resume the native background work.
+    this.#paused = false;
     let lines: Map<number, HighlightedToken[]>;
     if (this.#version !== document.version) {
+      this.#pendingDelivery = undefined;
       lines = this.#syncDocument(change, [start, end]).lines;
       this.#version = document.version;
     } else if (this.#tokenizer.lineCount !== document.lineCount) {
+      this.#pendingDelivery = undefined;
       lines = this.#tokenizer.reset(document.getText(), {
         renderRange: [start, end],
       }).lines;
     } else {
       lines = new Map();
       this.#readLines(lines, returnedStart, end);
+      this.#dropPendingLines(lines);
+      return lines;
     }
     // Balanced insert/delete batches shift rows without triggering host realignment.
     // Other structural edits need the suffix only when the host does not move rows.
@@ -93,6 +134,14 @@ export class HighlightsLiveTokenizer implements DiffsLiveTokenizer {
       this.#readLines(lines, returnedStart, end);
     }
     return lines;
+  }
+
+  // Rows a tokenize call returns are patched by the host from its result, so
+  // a queued delivery must not patch them a second time.
+  #dropPendingLines(lines: Map<number, HighlightedToken[]>): void {
+    const pending = this.#pendingDelivery;
+    if (pending === undefined) return;
+    for (const line of lines.keys()) pending.delete(line);
   }
 
   // Apply the editor's edits to the Wasm mirror, or reload the whole document
@@ -159,6 +208,8 @@ export class HighlightsLiveTokenizer implements DiffsLiveTokenizer {
     if (themeName === this.options.theme) return;
     this.options.theme = themeName;
     this.#tokenizer.dispose();
+    this.#pendingDelivery = undefined;
+    this.#paused = false;
     this.#version = this.options.textDocument.version;
     this.#tokenizer = this.#createTokenizer();
   }
@@ -173,35 +224,55 @@ export class HighlightsLiveTokenizer implements DiffsLiveTokenizer {
       lineIndex >= document.lineCount
     )
       return null;
-    // Bracket matching runs between renders, so a desynced mirror is reloaded
-    // here rather than read past its end. The mirror then matches the current
-    // version, so the next render must not re-apply that version's edits.
-    if (
-      this.#version !== document.version ||
-      this.#tokenizer.lineCount !== document.lineCount
-    ) {
-      this.#tokenizer.reset(document.getText(), {
-        renderRange: [lineIndex, lineIndex + 1],
-      });
-      this.#version = document.version;
+    // This read must leave the tokenizer as it found it: the reset and flush
+    // below resume background work and deliver completed lines synchronously,
+    // so completed lines are captured for a later delivery and the host's
+    // pause is restored before returning.
+    const captured = new Map<number, HighlightedToken[]>();
+    this.#capturedLines = captured;
+    try {
+      // Bracket matching runs between renders, so a desynced mirror is
+      // reloaded here rather than read past its end. The mirror then matches
+      // the current version, so the next render must not re-apply that
+      // version's edits.
+      if (
+        this.#version !== document.version ||
+        this.#tokenizer.lineCount !== document.lineCount
+      ) {
+        this.#pendingDelivery = undefined;
+        this.#tokenizer.reset(document.getText(), {
+          renderRange: [lineIndex, lineIndex + 1],
+        });
+        this.#version = document.version;
+      }
+      this.#tokenizer.flush(lineIndex + 1);
+    } finally {
+      this.#capturedLines = undefined;
+      if (this.#paused) this.#tokenizer.pause();
     }
-    this.#tokenizer.flush(lineIndex + 1);
+    if (captured.size > 0) this.#queueDelivery(captured);
     return this.#tokenizer.getLineTokens(lineIndex).bracketIgnoredRanges;
   }
 
   prebuildStateStack(_renderRange?: RenderRange): void {
+    this.#paused = false;
     this.#tokenizer.resume();
   }
   stopBackgroundTokenize(): void {
+    this.#paused = true;
     this.#tokenizer.pause();
   }
   pauseBackgroundTokenize(): void {
+    this.#paused = true;
     this.#tokenizer.pause();
   }
   resumeBackgroundTokenize(): void {
+    this.#paused = false;
     this.#tokenizer.resume();
   }
   dispose(): void {
+    this.#disposed = true;
+    this.#pendingDelivery = undefined;
     this.#tokenizer.dispose();
   }
 }

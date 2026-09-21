@@ -54,6 +54,7 @@ import {
 import { isDefaultRenderRange } from '../utils/isDefaultRenderRange';
 import { isFilePlainText } from '../utils/isFilePlainText';
 import { renderFileWithHighlighter } from '../utils/renderFileWithHighlighter';
+import { resolvePreferredHighlighter } from '../utils/resolvePreferredHighlighter';
 import type { WorkerPoolManager } from '../worker';
 
 type AnnotationLineMap<LAnnotation> = Record<
@@ -158,9 +159,10 @@ export class FileRenderer<LAnnotation = undefined> {
     if (workerManager?.isWorkingPool() !== true) {
       this.highlighter = getHighlighterIfLoaded({
         theme: options.theme ?? DEFAULT_THEMES,
-        preferredHighlighter:
-          workerManager?.getPreferredHighlighter() ??
-          options.preferredHighlighter,
+        preferredHighlighter: resolvePreferredHighlighter(
+          workerManager,
+          options
+        ),
       });
     }
   }
@@ -776,9 +778,10 @@ export class FileRenderer<LAnnotation = undefined> {
     } else {
       this.computedLang = file.lang ?? getFiletypeFromFileName(file.name);
       this.highlighter ??= getHighlighterIfLoaded({
-        preferredHighlighter:
-          this.workerManager?.getPreferredHighlighter() ??
-          this.options.preferredHighlighter,
+        preferredHighlighter: resolvePreferredHighlighter(
+          this.workerManager,
+          this.options
+        ),
       });
       const hasThemes =
         this.highlighter != null &&
@@ -1036,10 +1039,10 @@ export class FileRenderer<LAnnotation = undefined> {
   }
 
   public async initializeHighlighter(): Promise<DiffsHighlighter> {
-    const preferredHighlighter =
-      this.workerManager?.getPreferredHighlighter() ??
-      this.options.preferredHighlighter ??
-      'shiki-js';
+    const preferredHighlighter = resolvePreferredHighlighter(
+      this.workerManager,
+      this.options
+    );
     const highlighter = await getSharedHighlighter(
       getHighlighterOptions(this.computedLang, {
         theme: this.getLocalHighlightTheme(),
@@ -1048,9 +1051,7 @@ export class FileRenderer<LAnnotation = undefined> {
     );
     if (
       preferredHighlighter !==
-      (this.workerManager?.getPreferredHighlighter() ??
-        this.options.preferredHighlighter ??
-        'shiki-js')
+      resolvePreferredHighlighter(this.workerManager, this.options)
     ) {
       return this.initializeHighlighter();
     }

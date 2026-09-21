@@ -10,20 +10,26 @@ import { tokensToHtml } from '../../utils/tokensToHtml';
 import { HighlightsLiveTokenizer } from '../highlights-live';
 import { HighlightsStreamTokenizer } from '../highlights-stream';
 import { createDiffsThemeResolver } from '../themes/themeResolver';
+import type { DiffsTheme } from '../themes/types';
 import type { CodeToTokensOptions, DiffsHighlighter } from '../types';
 
 /** Highlights bundles its lexers; unsupported custom languages render as text. */
 export function createHighlightsHighlighter(): DiffsHighlighter {
   let raw: Highlighter | undefined = createHighlighter();
   const themeResolver = createDiffsThemeResolver('highlights');
+  // Themes this instance has used stay usable after disposeHighlighter()
+  // clears the shared resolver cache underneath a retained instance.
+  const usedThemes = new Map<string, DiffsTheme>();
   const highlighter: DiffsHighlighter = {
     name: 'highlights',
     themeResolver,
     getTheme(name) {
       if (raw == null) throw new Error('Highlighter is disposed');
-      const theme = themeResolver.getResolvedTheme(name);
+      const theme =
+        themeResolver.getResolvedTheme(name) ?? usedThemes.get(name);
       if (theme == null)
         throw new Error(`Theme "${name}" has not been resolved`);
+      usedThemes.set(name, theme);
       return theme;
     },
     codeToTokens(code, options) {
@@ -42,6 +48,7 @@ export function createHighlightsHighlighter(): DiffsHighlighter {
     },
     dispose() {
       raw = undefined;
+      usedThemes.clear();
     },
   };
   return highlighter;

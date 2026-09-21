@@ -122,6 +122,7 @@ import { iterateOverDiff } from '../utils/iterateOverDiff';
 import { parseDiffFromFile } from '../utils/parseDiffFromFile';
 import { isSafari } from '../utils/platform';
 import { prerenderHTMLIfNecessary } from '../utils/prerenderHTMLIfNecessary';
+import { resolvePreferredHighlighter } from '../utils/resolvePreferredHighlighter';
 import { getMeasuredScrollbarGutter } from '../utils/scrollbarGutter';
 import { setPreNodeProperties } from '../utils/setWrapperNodeProps';
 import { splitFileContents } from '../utils/splitFileContents';
@@ -1753,9 +1754,7 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
     const sync = (highlighter: DiffsHighlighter): void => {
       if (
         highlighter.name !==
-          (this.workerManager?.getPreferredHighlighter() ??
-            this.options.preferredHighlighter ??
-            'shiki-js') ||
+          resolvePreferredHighlighter(this.workerManager, this.options) ||
         !this.enabled ||
         this.editor !== editor ||
         this.fileContainer !== fileContainer ||
@@ -1787,9 +1786,10 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
     const highlighter = getHighlighterIfLoaded({
       theme,
       lang,
-      preferredHighlighter:
-        this.workerManager?.getPreferredHighlighter() ??
-        this.options.preferredHighlighter,
+      preferredHighlighter: resolvePreferredHighlighter(
+        this.workerManager,
+        this.options
+      ),
     });
     if (highlighter != null) {
       sync(highlighter);
@@ -1797,9 +1797,10 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
       void getSharedHighlighter({
         themes: getThemes(theme),
         langs: ['text', lang],
-        preferredHighlighter:
-          this.workerManager?.getPreferredHighlighter() ??
-          this.options.preferredHighlighter,
+        preferredHighlighter: resolvePreferredHighlighter(
+          this.workerManager,
+          this.options
+        ),
       }).then(sync);
     }
   }

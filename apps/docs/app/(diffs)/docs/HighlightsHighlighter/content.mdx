@@ -23,9 +23,12 @@ themes, theme families, and portable `DiffsTheme` objects. Use `'textmate'` to
 register a loader for Shiki under the same name. A Zed family uses its first
 theme. See [registerCustomTheme](#utilities-registercustomtheme) for examples.
 
-`createCSSVariablesTheme` returns a portable theme, and
-`registerCustomCSSVariableTheme` keeps its existing arguments and `--diffs-*`
-variables. Highlights includes its lexers; custom TextMate language
+`createCSSVariablesTheme` returns a portable theme with `--diffs-` as its
+default `variablePrefix`; it no longer re-exports Shiki's helper, whose default
+is `--shiki-`. Pass `variablePrefix: '--shiki-'` to keep stylesheets written for
+that default, or import `createCssVariablesTheme` from `shiki` for a raw
+registration. `registerCustomCSSVariableTheme` keeps its existing arguments and
+`--diffs-*` variables. Highlights includes its lexers; custom TextMate language
 registrations apply only to Shiki.
 
 The shared `DiffsHighlighter` exposes tokens, themes, live editing and streaming

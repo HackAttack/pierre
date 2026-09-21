@@ -13,7 +13,6 @@ import { ShikiStreamTokenizer } from '../shiki-stream';
 import { createDiffsThemeResolver } from '../themes/themeResolver';
 import type { DiffsTheme } from '../themes/types';
 import type { CodeToTokensOptions, DiffsHighlighter } from '../types';
-import { attachedShikiLanguages, shikiInternals } from './shiki-internals';
 
 /** Adapt Shiki while keeping its engines, grammars and tokenizers lazy. */
 export async function createShikiHighlighter(
@@ -32,8 +31,12 @@ export async function createShikiHighlighter(
   });
   const themeResolver = createDiffsThemeResolver(name);
   // Track theme objects so clearing or replacing a resolved theme reloads its
-  // token colors without querying Shiki's allocated list of loaded names.
+  // token colors without querying Shiki's allocated list of loaded names. The
+  // same map keeps a theme usable after disposeHighlighter() clears the
+  // shared resolver cache underneath a retained instance.
   const loadedThemes = new Map<string, DiffsTheme>();
+  // Names and aliases attached through this instance. Shiki's own registry
+  // allocates a fresh list per query, so membership is answered from here.
   const attachedLanguages = new Set(['text', 'ansi']);
   let disposed = false;
   const highlighter: DiffsHighlighter = {
@@ -41,10 +44,11 @@ export async function createShikiHighlighter(
     themeResolver,
     getTheme(themeName) {
       if (disposed) throw new Error('Highlighter is disposed');
-      const theme = themeResolver.getResolvedTheme(themeName);
+      const loaded = loadedThemes.get(themeName);
+      const theme = themeResolver.getResolvedTheme(themeName) ?? loaded;
       if (theme == null)
         throw new Error(`Theme "${themeName}" has not been resolved`);
-      if (loadedThemes.get(themeName) !== theme) {
+      if (loaded !== theme) {
         const textmate =
           theme.textmate ??
           (theme.cssVariables != null
@@ -81,27 +85,51 @@ export async function createShikiHighlighter(
     },
     hasLoadedLanguages(languages) {
       if (disposed) return false;
-      const loaded = raw.getLoadedLanguages();
-      return languages.every(
-        (lang) =>
-          lang === 'text' ||
-          lang === 'ansi' ||
-          (RegisteredCustomLanguages.has(lang)
-            ? attachedLanguages.has(lang)
-            : loaded.includes(lang))
-      );
+      // Custom registrations count only when attached here; bundled grammars
+      // loaded on the raw instance by other code are found in Shiki's list.
+      let loaded: string[] | undefined;
+      return languages.every((lang) => {
+        if (attachedLanguages.has(lang)) return true;
+        if (RegisteredCustomLanguages.has(lang)) return false;
+        loaded ??= raw.getLoadedLanguages();
+        return loaded.includes(lang);
+      });
+    },
+    attachLanguages(languages) {
+      if (disposed) throw new Error('Highlighter is disposed');
+      for (const lang of languages) {
+        if (attachedLanguages.has(lang.name)) continue;
+        const grammar = lang.data.find(
+          (grammar) =>
+            grammar.name === lang.name ||
+            grammar.aliases?.includes(lang.name) === true
+        );
+        if (grammar == null) {
+          throw new Error(
+            `attachResolvedLanguages: No returned grammar declares "${lang.name}" as its name or an alias.`
+          );
+        }
+        raw.loadLanguageSync(lang.data);
+        // Shiki skips a grammar whose name is already loaded, which silently
+        // drops a new alias; make sure the requested name resolves.
+        try {
+          raw.getLanguage(lang.name);
+        } catch {
+          throw new Error(
+            `attachResolvedLanguages: "${grammar.name}" is already loaded without alias "${lang.name}". Load the alias first or give the grammar a unique name.`
+          );
+        }
+        attachedLanguages.add(lang.name);
+      }
     },
     dispose() {
       if (disposed) return;
       disposed = true;
       loadedThemes.clear();
+      attachedLanguages.clear();
       raw.dispose();
-      shikiInternals.delete(highlighter);
-      attachedShikiLanguages.delete(highlighter);
     },
   };
-  shikiInternals.set(highlighter, raw);
-  attachedShikiLanguages.set(highlighter, attachedLanguages);
   return highlighter;
 
   // Synchronize pre-resolved worker themes before synchronous tokenization and

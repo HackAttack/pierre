@@ -2,6 +2,7 @@ import type { ThemeResolver } from '@pierre/theming';
 import type { Properties } from 'hast';
 
 import type { HighlighterTypes } from '../types';
+import type { ResolvedLanguage } from '../worker/types';
 import type { DiffsTheme } from './themes/types';
 import type {
   DiffsLiveTokenizer,
@@ -61,6 +62,10 @@ export interface TokensResult {
 export interface DiffsHighlighter {
   readonly name: HighlighterTypes;
   readonly themeResolver: ThemeResolver<DiffsTheme>;
+  /**
+   * A resolved theme by name. Themes an instance has already used stay
+   * available after the shared resolver cache is cleared.
+   */
   getTheme(name: string): DiffsTheme;
   codeToHtml(code: string, options: CodeToHtmlOptions): string;
   codeToTokens(code: string, options: CodeToTokensOptions): TokensResult;
@@ -70,6 +75,8 @@ export interface DiffsHighlighter {
   loadLanguages?(languages: readonly string[]): Promise<void>;
   /** Whether all requested TextMate grammars are loaded. */
   hasLoadedLanguages?(languages: readonly string[]): boolean;
+  /** Attach resolved TextMate grammars when supported by the backend. */
+  attachLanguages?(languages: readonly ResolvedLanguage[]): void;
   /** Release backend resources. The instance is unusable afterward. */
   dispose(): void;
 }

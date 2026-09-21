@@ -3,11 +3,11 @@ import { bundledLanguages } from 'shiki';
 
 import {
   areLanguagesAttached,
+  type DiffsHighlighter,
   disposeHighlighter,
   getSharedHighlighter,
   registerCustomLanguage,
 } from '../src';
-import { shikiInternals } from '../src/highlighter/backends/shiki-internals';
 import { RegisteredCustomLanguages } from '../src/highlighter/languages/constants';
 
 beforeEach(disposeHighlighter);
@@ -78,8 +78,8 @@ describe('language attachment', () => {
     const highlighter = await getSharedHighlighter({ themes: [], langs: [] });
     const failure = new Error('grammar load failed');
     const load = spyOn(
-      shikiInternals.get(highlighter)!,
-      'loadLanguageSync'
+      highlighter as Required<DiffsHighlighter>,
+      'attachLanguages'
     ).mockImplementation(() => {
       throw failure;
     });

@@ -567,3 +567,75 @@ describe('backend tokenizers', () => {
     }
   });
 });
+
+describe('Highlights bracket reads', () => {
+  test('keep background work paused and deliver completed lines afterwards', async () => {
+    const highlighter = await getSharedHighlighter({
+      preferredHighlighter: 'highlights',
+      themes: ['pierre-dark'],
+      langs: ['typescript'],
+    });
+    const document = new TextDocument(
+      'test.ts',
+      'const text = "🚀";\n'.repeat(300),
+      'typescript'
+    );
+    const delivered: number[] = [];
+    let reading = false;
+    let deliveredWhileReading = false;
+    const tokenizer = highlighter.createLiveTokenizer({
+      textDocument: document,
+      theme: 'pierre-dark',
+      onDeferTokenize: (lines) => {
+        deliveredWhileReading ||= reading;
+        delivered.push(...lines.keys());
+      },
+    });
+    try {
+      // Opening a comment on line 0 leaves every later line pending.
+      const change = document.applyEdits([
+        {
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 0 },
+          },
+          newText: '/*',
+        },
+      ]);
+      tokenizer.tokenize(change!, {
+        startingLine: 0,
+        totalLines: 2,
+        bufferBefore: 0,
+        bufferAfter: 0,
+      });
+      tokenizer.pauseBackgroundTokenize();
+      delivered.length = 0;
+      reading = true;
+      const ranges = tokenizer.getStringCommentRegexpRangesInLine(150);
+      reading = false;
+      expect(ranges?.[0]?.[0]).toBe(0);
+      expect(ranges?.at(-1)?.[1]).toBe(document.getLineText(150).length);
+      // Nothing reaches the host from inside the read.
+      expect(deliveredWhileReading).toBe(false);
+      expect(delivered).toHaveLength(0);
+      await Promise.resolve();
+      // The lines the read completed arrive once the read has returned.
+      expect(delivered.length).toBeGreaterThan(0);
+      expect(Math.max(...delivered)).toBeLessThan(151);
+      const completedByRead = delivered.length;
+      // The host's pause still holds: no background slice runs.
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(delivered).toHaveLength(completedByRead);
+      tokenizer.resumeBackgroundTokenize();
+      for (
+        let retries = 0;
+        retries < 100 && delivered.length === completedByRead;
+        retries++
+      )
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      expect(delivered.length).toBeGreaterThan(completedByRead);
+    } finally {
+      tokenizer.dispose();
+    }
+  });
+});

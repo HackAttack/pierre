@@ -57,6 +57,7 @@ import { createWindowFromScrollPosition } from '../utils/createWindowFromScrollP
 import { getThemes } from '../utils/getThemes';
 import { isStyleNode } from '../utils/isStyleNode';
 import { prefersReducedMotion } from '../utils/prefersReducedMotion';
+import { resolvePreferredHighlighter } from '../utils/resolvePreferredHighlighter';
 import { roundToDevicePixel } from '../utils/roundToDevicePixel';
 import type { WorkerPoolManager } from '../worker';
 import type { FileEditCompleteEvent, FileOptions } from './File';
@@ -1880,10 +1881,10 @@ export class CodeView<LAnnotation = undefined, Caret = undefined> {
   }
 
   private isSharedHighlighterReady(): boolean {
-    const preferredHighlighter =
-      this.workerManager?.getPreferredHighlighter() ??
-      this.options.preferredHighlighter ??
-      'shiki-js';
+    const preferredHighlighter = resolvePreferredHighlighter(
+      this.workerManager,
+      this.options
+    );
     const theme =
       this.workerManager?.getFileRenderOptions().theme ??
       this.options.theme ??

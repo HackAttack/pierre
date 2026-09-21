@@ -28,16 +28,10 @@ export function renderTokenLines(
   }: RenderTokenLinesOptions
 ): ElementContent[] {
   const decorationsByLine = new Map<number, LineDecoration[]>();
-  let nextOffset = 0;
   const lineOffsets = decorations.some(
     (item) => typeof item.start === 'number' || typeof item.end === 'number'
   )
-    ? lines.map((tokens) => {
-        const offset = tokens[0]?.offset ?? nextOffset;
-        const last = tokens.at(-1);
-        nextOffset = (last?.offset ?? offset) + (last?.content.length ?? 0) + 1;
-        return offset;
-      })
+    ? getLineOffsets(lines)
     : [];
   for (const decoration of decorations) {
     const normalized: LineDecoration = {
@@ -221,4 +215,38 @@ function getDecorationPosition(
     else high = middle;
   }
   return { line: low, character: position - (lineOffsets[low] ?? 0) };
+}
+
+// Absolute start offset of every line, for decorations given as offsets.
+// Tokens carry absolute offsets, so a line with tokens starts at its first
+// one. An empty line has no tokens; it starts after the previous line's
+// terminator, whose length ("\n" or "\r\n") is inferred from the first gap
+// between two lines that do have tokens.
+function getLineOffsets(lines: ThemedToken[][]): number[] {
+  let terminatorLength = 1;
+  let previousEnd: number | undefined;
+  let emptyLines = 0;
+  for (const tokens of lines) {
+    const first = tokens[0];
+    const last = tokens.at(-1);
+    if (first === undefined || last === undefined) {
+      emptyLines++;
+      continue;
+    }
+    if (previousEnd !== undefined) {
+      if ((first.offset - previousEnd) / (emptyLines + 1) === 2)
+        terminatorLength = 2;
+      break;
+    }
+    previousEnd = last.offset + last.content.length;
+    emptyLines = 0;
+  }
+  let nextOffset = 0;
+  return lines.map((tokens) => {
+    const offset = tokens[0]?.offset ?? nextOffset;
+    const last = tokens.at(-1);
+    nextOffset =
+      (last?.offset ?? offset) + (last?.content.length ?? 0) + terminatorLength;
+    return offset;
+  });
 }

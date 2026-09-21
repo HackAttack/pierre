@@ -80,6 +80,7 @@ import { isDiffPlainText } from '../utils/isDiffPlainText';
 import type { DiffLineMetadata } from '../utils/iterateOverDiff';
 import { iterateOverDiff } from '../utils/iterateOverDiff';
 import { renderDiffWithHighlighter } from '../utils/renderDiffWithHighlighter';
+import { resolvePreferredHighlighter } from '../utils/resolvePreferredHighlighter';
 import {
   recomputeDiffHunksForEdit,
   recomputeEmptyDocumentDiff,
@@ -277,9 +278,10 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
     if (workerManager?.isWorkingPool() !== true) {
       this.highlighter = getHighlighterIfLoaded({
         theme: options.theme ?? DEFAULT_THEMES,
-        preferredHighlighter:
-          workerManager?.getPreferredHighlighter() ??
-          options.preferredHighlighter,
+        preferredHighlighter: resolvePreferredHighlighter(
+          workerManager,
+          options
+        ),
       });
     }
   }
@@ -902,10 +904,10 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
   }
 
   public async initializeHighlighter(): Promise<DiffsHighlighter> {
-    const preferredHighlighter =
-      this.workerManager?.getPreferredHighlighter() ??
-      this.options.preferredHighlighter ??
-      'shiki-js';
+    const preferredHighlighter = resolvePreferredHighlighter(
+      this.workerManager,
+      this.options
+    );
     const highlighter = await getSharedHighlighter(
       getHighlighterOptions(this.computedLangs, {
         theme: this.getLocalHighlightTheme(),
@@ -914,9 +916,7 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
     );
     if (
       preferredHighlighter !==
-      (this.workerManager?.getPreferredHighlighter() ??
-        this.options.preferredHighlighter ??
-        'shiki-js')
+      resolvePreferredHighlighter(this.workerManager, this.options)
     ) {
       return this.initializeHighlighter();
     }
@@ -1184,9 +1184,10 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
     } else {
       this.computedLangs = getDiffLanguages(diff);
       this.highlighter ??= getHighlighterIfLoaded({
-        preferredHighlighter:
-          this.workerManager?.getPreferredHighlighter() ??
-          this.options.preferredHighlighter,
+        preferredHighlighter: resolvePreferredHighlighter(
+          this.workerManager,
+          this.options
+        ),
       });
       const hasThemes =
         this.highlighter != null &&
