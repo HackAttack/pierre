@@ -1,7 +1,17 @@
-import { expect, test } from 'bun:test';
+import { beforeAll, expect, test } from 'bun:test';
 
-// Follow static imports from the public entrypoint; backend imports must remain dynamic.
-test('the public entrypoint loads no syntax backend eagerly', async () => {
+const entrypoints = [
+  'packages/diffs/src/index.ts',
+  'packages/diffs/src/edit/index.ts',
+  'packages/diffs/src/react/index.ts',
+  'packages/diffs/src/ssr/index.ts',
+  'packages/diffs/src/worker/index.ts',
+  'packages/diffs/src/worker/worker.ts',
+  'packages/theming/src/themes.ts',
+];
+let outputs: NonNullable<Bun.BuildMetafile['outputs']>;
+
+beforeAll(async () => {
   // Bun 1.4.0 resolves source modules differently inside its test runner; build in a clean runtime.
   const buildProcess = Bun.spawn(
     [
@@ -9,18 +19,18 @@ test('the public entrypoint loads no syntax backend eagerly', async () => {
       '--eval',
       `
     const build = await Bun.build({
-      entrypoints: ['./src/index.ts'],
-      packages: 'external',
+      entrypoints: ${JSON.stringify(entrypoints)},
       external: ['*.css?inline'],
       target: 'browser',
       splitting: true,
       metafile: true,
     });
+    if (!build.success) throw new AggregateError(build.logs, 'Build failed');
     console.log(JSON.stringify(build.metafile));
   `,
     ],
     {
-      cwd: new URL('..', import.meta.url).pathname,
+      cwd: new URL('../../..', import.meta.url).pathname,
       stdout: 'pipe',
       stderr: 'pipe',
     }
@@ -33,38 +43,42 @@ test('the public entrypoint loads no syntax backend eagerly', async () => {
   expect(errors).toBe('');
   expect(exitCode).toBe(0);
   const metadata: Bun.BuildMetafile = JSON.parse(output);
-  const inputs = metadata.inputs;
-  if (inputs == null) throw new Error('Expected the build import graph');
-  const entry = Object.keys(inputs).find(
-    (path) => path.endsWith('/src/index.ts') || path === 'src/index.ts'
-  );
+  if (metadata.outputs == null)
+    throw new Error('Expected the emitted chunk graph');
+  outputs = metadata.outputs;
+});
+
+// Follow emitted static chunks, including bundled workspace and npm dependencies.
+test.each(entrypoints)('%s loads no syntax backend eagerly', (entrypoint) => {
+  const entry = Object.keys(outputs).find((path) => {
+    const source = outputs[path]?.entryPoint;
+    return source === entrypoint || source?.endsWith(`/${entrypoint}`) === true;
+  });
   if (entry == null)
-    throw new Error('Expected the public entrypoint in the import graph');
+    throw new Error(`Missing emitted entrypoint: ${entrypoint}`);
   const pending = [entry];
   const visited = new Set<string>();
-  const externalImports = new Set<string>();
+  const eagerInputs = new Set<string>();
   while (pending.length > 0) {
     const path = pending.pop()!;
     if (visited.has(path)) continue;
     visited.add(path);
-    for (const dependency of inputs[path]?.imports ?? []) {
+    const output = outputs[path];
+    if (output == null) throw new Error(`Missing emitted chunk: ${path}`);
+    for (const input of Object.keys(output.inputs)) eagerInputs.add(input);
+    for (const dependency of output.imports) {
       if (dependency.kind === 'dynamic-import') continue;
-      if (dependency.external === true) externalImports.add(dependency.path);
+      if ('external' in dependency && dependency.external === true)
+        eagerInputs.add(dependency.path);
       else pending.push(dependency.path);
     }
   }
-  expect(visited.size).toBeGreaterThan(20);
+  expect(eagerInputs.size).toBeGreaterThan(5);
   expect(
-    [...externalImports].filter((path) =>
-      /^(shiki(?:\/|$)|@shikijs\/|@pierre\/highlights(?:\/|$))/.test(path)
+    [...eagerInputs].filter((path) =>
+      /(?:^|\/)(?:(?:shiki|@shikijs|highlights)(?:\/|$)|highlighter\/backends\/(?:shiki|highlights)\.)/.test(
+        path
+      )
     )
   ).toEqual([]);
-  expect(
-    [...visited].some((path) => path.includes('/highlighter/backends/shiki.'))
-  ).toBe(false);
-  expect(
-    [...visited].some((path) =>
-      path.includes('/highlighter/backends/highlights.')
-    )
-  ).toBe(false);
 });
