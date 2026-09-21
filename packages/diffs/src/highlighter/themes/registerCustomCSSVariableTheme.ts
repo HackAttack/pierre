@@ -13,7 +13,5 @@ export function registerCustomCSSVariableTheme(
     variableDefaults,
     fontStyle,
   });
-  const loader = () => Promise.resolve(theme);
-  registerCustomTheme(name, loader);
-  registerCustomTheme(name, loader, 'zed');
+  registerCustomTheme(name, () => Promise.resolve(theme), 'diffs');
 }

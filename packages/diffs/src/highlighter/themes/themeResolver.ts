@@ -20,9 +20,28 @@ export type CustomThemeLoader = ThemeLoader<
 >;
 export const customThemes: Map<
   string,
-  Partial<Record<'textmate' | 'zed', CustomThemeLoader>>
+  Partial<Record<'textmate' | 'zed' | 'diffs', CustomThemeLoader>>
 > = new Map();
 const resolvers = new Map<HighlighterTypes, ThemeResolver<DiffsTheme>>();
+
+// Keep the first loader registered for each name and format.
+export function registerCustomThemeLoader(
+  themeName: string,
+  loader: CustomThemeLoader,
+  type: 'textmate' | 'zed' | 'diffs'
+): void {
+  const themes = customThemes.get(themeName) ?? {};
+  if (themes[type] !== undefined) {
+    console.error(
+      'SharedHighlight.registerCustomTheme: theme name and type already registered',
+      themeName,
+      type
+    );
+    return;
+  }
+  themes[type] = loader;
+  customThemes.set(themeName, themes);
+}
 
 // Map Zed colors to the VS Code keys used by editor and diff overlays.
 const ZED_COLOR_ALIASES: readonly (readonly [
@@ -123,7 +142,7 @@ export function createDiffsThemeResolver(
       const custom = customThemes.get(name);
       if (backend === 'highlights') {
         // Custom Zed palettes take precedence over the bundled catalog.
-        const loader = custom?.zed;
+        const loader = custom?.zed ?? custom?.diffs;
         if (loader !== undefined) {
           const loaded = await loader();
           const theme = 'default' in loaded ? loaded.default : loaded;
@@ -147,7 +166,7 @@ export function createDiffsThemeResolver(
           );
         }
       } else {
-        const loader = custom?.textmate;
+        const loader = custom?.textmate ?? custom?.diffs;
         let loaded: ThemeRegistration | DiffsTheme | ZedTheme | ZedThemeFamily;
         if (loader !== undefined) {
           const result = await loader();

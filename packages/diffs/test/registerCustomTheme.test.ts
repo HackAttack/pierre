@@ -162,7 +162,7 @@ describe('registerCustomTheme format selection', () => {
     expect(loader).toHaveBeenCalledTimes(2);
   });
 
-  for (const first of ['textmate', 'zed'] as const) {
+  for (const first of ['textmate', 'zed', 'diffs'] as const) {
     test(`keeps same-name loaders separate when ${first} registers first`, async () => {
       const name = `custom-format-order-${first}`;
       names.push(name);
@@ -180,10 +180,28 @@ describe('registerCustomTheme format selection', () => {
         })
       );
       const zedLoader = mock(() => Promise.resolve(zed));
-      const loaders = { textmate: textmateLoader, zed: zedLoader };
-      const second = first === 'textmate' ? 'zed' : 'textmate';
-      registerCustomTheme(name, loaders[first], first);
-      registerCustomTheme(name, loaders[second], second);
+      const diffsLoader = mock(() =>
+        Promise.resolve({
+          name,
+          type: 'dark' as const,
+          fg: '#abcdef',
+          bg: '#012345',
+          zed,
+        })
+      );
+      if (first === 'diffs') {
+        registerCustomTheme(name, diffsLoader, 'diffs');
+      }
+      if (first === 'textmate') {
+        registerCustomTheme(name, textmateLoader, 'textmate');
+        registerCustomTheme(name, zedLoader, 'zed');
+      } else {
+        registerCustomTheme(name, zedLoader, 'zed');
+        registerCustomTheme(name, textmateLoader, 'textmate');
+      }
+      if (first !== 'diffs') {
+        registerCustomTheme(name, diffsLoader, 'diffs');
+      }
       expect(textmateLoader).not.toHaveBeenCalled();
       expect(zedLoader).not.toHaveBeenCalled();
 
@@ -191,6 +209,7 @@ describe('registerCustomTheme format selection', () => {
       expect(highlights.fg).toBe('#ddeeff');
       expect(highlights.zed?.name).toBe(name);
       expect(zedLoader).toHaveBeenCalledTimes(1);
+      expect(diffsLoader).not.toHaveBeenCalled();
       expect(textmateLoader).not.toHaveBeenCalled();
 
       for (const backend of ['shiki-js', 'shiki-wasm'] as const) {
@@ -210,7 +229,11 @@ describe('registerCustomTheme format selection', () => {
       const name = 'pierre-dark';
       names.push(name);
       const loader = mock(() => Promise.resolve(zed));
-      registerCustomTheme(name, loader, type);
+      if (type === 'textmate') {
+        registerCustomTheme(name, loader);
+      } else {
+        registerCustomTheme(name, loader, type);
+      }
 
       const backend = type === 'textmate' ? 'highlights' : 'shiki-js';
       const theme = await resolveTheme(name, backend);
@@ -222,11 +245,9 @@ describe('registerCustomTheme format selection', () => {
   test('rejects a TextMate theme registered as Zed', () => {
     const name = 'custom-invalid-zed';
     names.push(name);
-    registerCustomTheme(
-      name,
-      () => Promise.resolve({ name, tokenColors: [] }),
-      'zed'
-    );
+    const loader = () => Promise.resolve({ name, tokenColors: [] });
+    // @ts-expect-error TextMate loaders require the TextMate registration type.
+    registerCustomTheme(name, loader, 'zed');
     expect(resolveTheme(name, 'highlights')).rejects.toThrow(
       /TextMate.*registerCustomTheme/
     );

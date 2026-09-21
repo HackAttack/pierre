@@ -96,7 +96,7 @@ describe('backend theme resolution', () => {
     }
   });
 
-  test('selects each backend palette from a portable theme registered for both formats', async () => {
+  test('selects each backend palette from a default-exported Diffs theme', async () => {
     const { normalizeTheme } = await import('shiki/core');
     const { registerCustomTheme } =
       await import('../src/highlighter/themes/registerCustomTheme');
@@ -125,8 +125,11 @@ describe('backend theme resolution', () => {
         style: { text: '#ddeeff', background: '#001122', created: '#00ff00' },
       },
     };
-    registerCustomTheme(name, () => Promise.resolve(portable));
-    registerCustomTheme(name, () => Promise.resolve(portable), 'zed');
+    registerCustomTheme(
+      name,
+      () => Promise.resolve({ default: portable }),
+      'diffs'
+    );
     try {
       const textmate = await resolveTheme(name, 'shiki-js');
       const zed = await resolveTheme(name, 'highlights');

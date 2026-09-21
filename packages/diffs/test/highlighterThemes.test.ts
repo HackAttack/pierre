@@ -172,7 +172,7 @@ describe('highlights themes', () => {
         },
       },
     };
-    registerCustomTheme(name, () => Promise.resolve(custom), 'zed');
+    registerCustomTheme(name, () => Promise.resolve(custom), 'diffs');
     try {
       cleanUpResolvedThemes('highlights');
       const highlighter = await getSharedHighlighter({
