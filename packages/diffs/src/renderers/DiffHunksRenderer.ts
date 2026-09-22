@@ -282,6 +282,7 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
   }
 
   public cleanUp(): void {
+    this.endEditSession();
     this.recycle();
     this.expandedHunks.clear();
     this.workerManager = undefined;
@@ -291,11 +292,20 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
   public recycle(): void {
     this.highlighter = undefined;
     this.diff = undefined;
-    this.clearRenderCache();
+    if (this.editSessionActive) {
+      // The editor keeps its document and undo history while offscreen. Its
+      // private highlight result belongs to that session and can resume too.
+      if (this.renderCache != null) {
+        this.renderCache.renderRange = undefined;
+      }
+      this.pendingHighlightResult = undefined;
+      this.pendingStructuralRows = undefined;
+    } else {
+      this.clearRenderCache();
+    }
     this.additionAnnotations = {};
     this.deletionAnnotations = {};
     this.workerManager?.cleanUpTasks(this);
-    this.endEditSession();
   }
 
   /**
@@ -311,12 +321,22 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
     diff: FileDiffMetadata,
     externalDiff?: FileDiffMetadata
   ): void {
-    const { editSessionActive: wasAlreadyActive, renderCache } = this;
+    const { editSessionActive: wasAlreadyActive } = this;
     this.editSessionActive = true;
     if (!wasAlreadyActive) {
       this.pendingHighlightResult = undefined;
     }
     this.diff = diff;
+    // A replacement creates a new session diff. The old session's result
+    // cannot become the new one's private editor markup.
+    if (
+      wasAlreadyActive &&
+      this.renderCache != null &&
+      this.renderCache.diff !== diff
+    ) {
+      this.clearRenderCache();
+    }
+    const { renderCache } = this;
 
     if (!diff.isPartial && diff.additionLines.length === 0) {
       Object.assign(
@@ -376,6 +396,9 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
   public endEditSession(): void {
     this.editSessionActive = false;
     this.pendingHighlightResult = undefined;
+    if (this.diff == null) {
+      this.clearRenderCache();
+    }
   }
 
   /**

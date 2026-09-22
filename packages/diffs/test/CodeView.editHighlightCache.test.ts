@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { createTwoFilesPatch } from 'diff';
 
 import { CodeView } from '../src/components/CodeView';
 import { Editor } from '../src/editor/editor';
@@ -8,8 +9,15 @@ import {
 } from '../src/highlighter/shared_highlighter';
 import type { CodeViewDiffItem, DiffsHighlighter } from '../src/types';
 import { parseDiffFromFile } from '../src/utils/parseDiffFromFile';
+import { parsePatchFiles } from '../src/utils/parsePatchFiles';
 import { renderDiffWithHighlighter } from '../src/utils/renderDiffWithHighlighter';
-import { createRoot, installDom, wait, waitFor } from './domHarness';
+import {
+  createRoot,
+  installDom,
+  renderItems,
+  wait,
+  waitFor,
+} from './domHarness';
 import { createInitializedManager } from './workerPoolHarness';
 
 let highlighter: DiffsHighlighter;
@@ -17,7 +25,7 @@ let highlighter: DiffsHighlighter;
 beforeAll(async () => {
   highlighter = await getSharedHighlighter({
     themes: ['pierre-dark'],
-    langs: ['typescript'],
+    langs: ['typescript', 'javascript'],
     preferredHighlighter: 'shiki-js',
   });
 });
@@ -174,6 +182,149 @@ function expectedSources(id: string, edit: boolean): string[] {
         `export const ${id}_new0 = "after";`,
       ]
     : [];
+}
+
+test('an edited session keeps its highlight and remains editable after remount', async () => {
+  await withViewer(
+    true,
+    false,
+    async ({ viewer, flush, clearHighlights, highlightedSources }) => {
+      const editor = viewer.getEditor('first');
+      if (editor == null) throw new Error('Expected the first editor');
+      editor.applyEdits([
+        {
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 0 },
+          },
+          newText: '// edited\n',
+        },
+      ]);
+      await flush();
+      viewer.scrollTo({
+        type: 'line',
+        id: 'second',
+        lineNumber: 30,
+        side: 'additions',
+        align: 'start',
+        behavior: 'instant',
+      });
+      await flush();
+      expect(viewer.getRenderedItems().map(({ id }) => id)).toEqual(['second']);
+      clearHighlights();
+      viewer.scrollTo({
+        type: 'item',
+        id: 'first',
+        align: 'start',
+        behavior: 'instant',
+      });
+      await flush();
+      expect(viewer.getEditor('first')).toBe(editor);
+      expect(editor.getText()).toStartWith('// edited\n');
+      expect(highlightedSources()).toEqual([]);
+      expect(
+        viewer.getRenderedItems()[0].element.shadowRoot?.textContent
+      ).toContain('// edited');
+      editor.applyEdits([
+        {
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 0 },
+          },
+          newText: '// resumed\n',
+        },
+      ]);
+      await flush();
+      expect(editor.getText()).toStartWith('// resumed\n// edited\n');
+      expect(
+        viewer.getRenderedItems()[0].element.shadowRoot?.textContent
+      ).toContain('// resumed');
+    }
+  );
+});
+
+for (const partial of [false, true]) {
+  test(`replacing a recycled file invalidates its highlights (partial: ${partial})`, async () => {
+    const dom = installDom();
+    const first = createItem('first', true);
+    const second = createItem('second', true);
+    const oldFile = {
+      name: 'first.ts',
+      contents: first.fileDiff.deletionLines.join(''),
+    };
+    const newFile = {
+      name: 'renamed.js',
+      contents: first.fileDiff.additionLines
+        .join('')
+        .replace('first_new0', 'replacement'),
+    };
+    const replacement = partial
+      ? parsePatchFiles(
+          createTwoFilesPatch(
+            oldFile.name,
+            newFile.name,
+            oldFile.contents,
+            newFile.contents
+          ),
+          'replacement',
+          true
+        )[0]?.files[0]
+      : parseDiffFromFile(oldFile, newFile);
+    const viewer = new CodeView({
+      theme: 'pierre-dark',
+      createEditor: (type, options, key) => new Editor(type, options, key),
+      loadDiffFiles: () => Promise.resolve({ oldFile, newFile }),
+    });
+    const highlight = spyOn(highlighter, 'codeToHast');
+    try {
+      if (replacement == null) throw new Error('Expected replacement diff');
+      expect(replacement.isPartial === true).toBe(partial);
+      viewer.setup(createRoot({ height: 200 }));
+      await renderItems(viewer, [first, second]);
+      const editor = viewer.getEditor('first');
+      if (editor == null) throw new Error('Expected the first editor');
+      viewer.scrollTo({
+        type: 'line',
+        id: 'second',
+        lineNumber: 30,
+        side: 'additions',
+        align: 'start',
+        behavior: 'instant',
+      });
+      viewer.render(true);
+      await wait(0);
+      expect(viewer.getRenderedItems().map(({ id }) => id)).toEqual(['second']);
+
+      highlight.mockClear();
+      viewer.updateItem({ ...first, fileDiff: replacement, version: 1 });
+      viewer.scrollTo({
+        type: 'item',
+        id: 'first',
+        align: 'start',
+        behavior: 'instant',
+      });
+      viewer.render(true);
+      await waitFor(() => editor.getText() === newFile.contents);
+      expect(editor.getText()).toBe(newFile.contents);
+      expect(editor.getFile()?.name).toBe(newFile.name);
+      expect(replacement.isPartial).not.toBe(true);
+      expect(
+        highlight.mock.calls.some(
+          ([source, options]) =>
+            source.includes('replacement') && options.lang === 'javascript'
+        )
+      ).toBe(true);
+      const content =
+        viewer.getRenderedItems()[0].element.shadowRoot?.textContent;
+      expect(content).toContain('replacement');
+      expect(content).not.toContain('first_new0');
+    } finally {
+      viewer.cleanUp();
+      highlight.mockRestore();
+      await wait(0);
+      dom.cleanup();
+    }
+  });
 }
 
 for (const useTokenTransformer of [false, true]) {
