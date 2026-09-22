@@ -7,12 +7,17 @@ import {
   disposeHighlighter,
   getSharedHighlighter,
 } from '../src/highlighter/shared_highlighter';
-import type { CodeViewDiffItem, DiffsHighlighter } from '../src/types';
+import type {
+  CodeViewDiffItem,
+  CodeViewItem,
+  DiffsHighlighter,
+} from '../src/types';
 import { parseDiffFromFile } from '../src/utils/parseDiffFromFile';
 import { parsePatchFiles } from '../src/utils/parsePatchFiles';
 import { renderDiffWithHighlighter } from '../src/utils/renderDiffWithHighlighter';
 import {
   createRoot,
+  dispatchScroll,
   installDom,
   renderItems,
   wait,
@@ -62,6 +67,95 @@ function createItem(id: string, edit: boolean): CodeViewDiffItem<undefined> {
     ),
   };
 }
+
+test('an editable file keeps its highlighted document through a scroll remount', async () => {
+  const dom = installDom();
+  const viewer = new CodeView({
+    theme: 'pierre-dark',
+    createEditor: (type, options, key) => new Editor(type, options, key),
+  });
+  const highlight = spyOn(highlighter, 'codeToHast');
+  const root = createRoot({ height: 200 });
+  const items: CodeViewItem<undefined>[] = Array.from(
+    { length: 8 },
+    (_, index) => ({
+      id: `file-${index}`,
+      type: 'file',
+      edit: index === 0,
+      version: 0,
+      file: {
+        name: `file-${index}.ts`,
+        contents: Array.from(
+          { length: 80 },
+          (_, line) => `export const file${index}_line${line} = ${line};\n`
+        ).join(''),
+      },
+    })
+  );
+  try {
+    viewer.setup(root);
+    await renderItems(viewer, items);
+    const editor = viewer.getEditor('file-0');
+    if (editor == null) throw new Error('Expected the file editor');
+    editor.applyEdits([
+      {
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 0, character: 0 },
+        },
+        newText: '// edited\n',
+      },
+    ]);
+    viewer.render(true);
+    await wait(0);
+    expect(editor.getText()).toStartWith('// edited\n');
+
+    root.scrollTop = 20_000;
+    dispatchScroll(root);
+    viewer.render(true);
+    await wait(0);
+    expect(viewer.getRenderedItems().some(({ id }) => id === 'file-0')).toBe(
+      false
+    );
+    highlight.mockClear();
+
+    root.scrollTop = 0;
+    dispatchScroll(root);
+    viewer.render(true);
+    await waitFor(() =>
+      viewer.getRenderedItems().some(({ id }) => id === 'file-0')
+    );
+    expect(viewer.getEditor('file-0')).toBe(editor);
+    expect(
+      highlight.mock.calls.filter(
+        ([, options]) => options.lang === 'typescript'
+      )
+    ).toHaveLength(0);
+    const first = viewer.getRenderedItems().find(({ id }) => id === 'file-0');
+    expect(first?.element.shadowRoot?.textContent).toContain('// edited');
+    expect(
+      first?.element.shadowRoot?.querySelector('[data-line] [data-char]')
+    ).not.toBeNull();
+    editor.applyEdits([
+      {
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 0, character: 0 },
+        },
+        newText: '// resumed\n',
+      },
+    ]);
+    viewer.render(true);
+    await wait(0);
+    expect(editor.getText()).toStartWith('// resumed\n// edited\n');
+    expect(first?.element.shadowRoot?.textContent).toContain('// resumed');
+  } finally {
+    viewer.cleanUp();
+    highlight.mockRestore();
+    await wait(0);
+    dom.cleanup();
+  }
+});
 
 interface HighlightHarness {
   viewer: CodeView;

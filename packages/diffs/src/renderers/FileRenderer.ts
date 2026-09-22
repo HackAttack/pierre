@@ -184,6 +184,7 @@ export class FileRenderer<LAnnotation = undefined> {
   }
 
   public cleanUp(): void {
+    this.endEditSession();
     this.recycle();
     this.workerManager = undefined;
     this.onRenderUpdate = undefined;
@@ -212,6 +213,12 @@ export class FileRenderer<LAnnotation = undefined> {
     // Edit updates call this again before each write. That cache is already
     // private and must retain plain-text session results.
     if (wasAlreadyActive && renderCache.file === file) {
+      return;
+    }
+    if (wasAlreadyActive) {
+      this.clearRenderCache();
+      this.lineCache = undefined;
+      this.textDocumentCache = new WeakMap();
       return;
     }
     const { options } = this.getRenderOptions(file);
@@ -269,6 +276,12 @@ export class FileRenderer<LAnnotation = undefined> {
   public endEditSession(settledFile?: FileContents): void {
     this.editSessionActive = false;
     this.pendingHighlightResult = undefined;
+    if (this.file == null) {
+      this.clearRenderCache();
+      this.lineCache = undefined;
+      this.textDocumentCache = new WeakMap();
+      return;
+    }
     const { renderCache } = this;
     if (
       settledFile == null ||
@@ -293,19 +306,22 @@ export class FileRenderer<LAnnotation = undefined> {
   }
 
   public recycle(): void {
-    this.clearRenderCache();
+    if (this.editSessionActive) {
+      // The editor and its document survive this recycle. Keep their patched
+      // highlight, line map, and document count together for the next mount.
+      if (this.renderCache != null) {
+        this.renderCache.renderRange = undefined;
+      }
+      this.pendingHighlightResult = undefined;
+      this.pendingStructuralRows = undefined;
+    } else {
+      this.clearRenderCache();
+      this.lineCache = undefined;
+      this.textDocumentCache = new WeakMap();
+    }
     this.highlighter = undefined;
     this.workerManager?.cleanUpTasks(this);
-    this.lineCache = undefined;
     this.file = undefined;
-    // The session flag re-seeds on the next editor attach (beginEditSession).
-    this.endEditSession();
-    // The edited-document cache is only coherent alongside the render cache
-    // it patched. Keeping it across a recycle would let getLineCount report
-    // edit-session line counts (keyed by the long-lived file object) against
-    // a result rebuilt from the file's own contents, which processFileResult
-    // treats as a missing-line error.
-    this.textDocumentCache = new WeakMap();
   }
 
   public clearRenderCache(): void {

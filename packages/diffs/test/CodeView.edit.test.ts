@@ -774,7 +774,7 @@ describe('CodeView item edit mode', () => {
       );
 
       // Scroll the edited item out (recycle) and back in. The private session
-      // survives the renderer cache reset, so the remount renders its grown
+      // keeps its patched render cache, so the remount renders its grown
       // document without changing the caller-owned item.
       root.scrollTop = 20_000;
       dispatchScroll(root);
@@ -930,7 +930,7 @@ describe('CodeView item edit mode', () => {
       edited.instance.updateRenderCache(new Map([[0, tokens]]), 'light');
 
       // Scroll the edited item out (recycle) and back in. The private session
-      // remains authoritative after the renderer cache is discarded.
+      // retains its patched render cache across the remount.
       root.scrollTop = 20_000;
       dispatchScroll(root);
       viewer.render(true);
