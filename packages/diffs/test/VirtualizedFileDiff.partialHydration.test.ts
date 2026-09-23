@@ -376,7 +376,14 @@ describe('VirtualizedFileDiff partial hydration', () => {
       const secondChange = createPartialChange('second.txt');
       const virtualizerState = createAdvancedVirtualizer();
       instance = new TestVirtualizedFileDiff(
-        { disableFileHeader: true },
+        {
+          disableFileHeader: true,
+          loadDiffFiles: () =>
+            Promise.resolve({
+              oldFile: firstChange.oldFile,
+              newFile: firstChange.newFile,
+            }),
+        },
         virtualizerState.virtualizer
       );
 
@@ -391,6 +398,31 @@ describe('VirtualizedFileDiff partial hydration', () => {
       expect(virtualizerState.instanceChangedCalls).toEqual([
         { layoutDirty: true },
       ]);
+    } finally {
+      instance?.cleanUp();
+    }
+  });
+
+  test('missing loader rejects a CodeView expansion before staging it', () => {
+    let instance: TestVirtualizedFileDiff | undefined;
+    try {
+      const firstChange = createPartialChange('first.txt');
+      const secondChange = createPartialChange('second.txt');
+      const virtualizerState = createAdvancedVirtualizer();
+      instance = new TestVirtualizedFileDiff(
+        { disableFileHeader: true },
+        virtualizerState.virtualizer
+      );
+
+      instance.updateCodeViewLayout(firstChange.partial, 0);
+      const expandedBefore = instance.getExpandedHunkForTest(0);
+      expect(() => instance?.expandHunk(0, 'down', 1)).toThrow(
+        'loadDiffFiles is required to load full files'
+      );
+      expect(virtualizerState.instanceChangedCalls).toEqual([]);
+
+      instance.updateCodeViewLayout(secondChange.partial, 0);
+      expect(instance.getExpandedHunkForTest(0)).toEqual(expandedBefore);
     } finally {
       instance?.cleanUp();
     }

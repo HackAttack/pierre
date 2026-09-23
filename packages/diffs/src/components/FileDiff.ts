@@ -1169,12 +1169,12 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
     direction: ExpansionDirections,
     expansionLineCountOverride?: number
   ): void => {
+    this.loadFilesIfNecessary();
     this.hunksRenderer.expandHunk(
       hunkIndex,
       direction,
       expansionLineCountOverride
     );
-    this.loadFilesIfNecessary();
     this.rerender();
   };
 
@@ -1185,11 +1185,15 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
     } = this;
     if (
       fileDiff == null ||
-      loadDiffFiles == null ||
       !canHydrateDiff(fileDiff) ||
       this.pendingFiles?.fileDiff === fileDiff
     ) {
       return;
+    }
+    if (loadDiffFiles == null) {
+      throw new Error(
+        'FileDiff: loadDiffFiles is required to load full files for a partial diff'
+      );
     }
 
     const promise = this.loadFilesForDiff(fileDiff, loadDiffFiles);
@@ -1228,6 +1232,11 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
     }
     const pending = this.__prepareForEditing();
     if (pending == null) {
+      if (this.fileDiff?.isPartial === true && !canHydrateDiff(this.fileDiff)) {
+        throw new Error(
+          'FileDiff.prepareForEditing: this partial diff cannot be hydrated; provide a complete diff'
+        );
+      }
       throw new Error(
         'FileDiff.prepareForEditing: a partial diff requires loadDiffFiles'
       );
@@ -1244,6 +1253,11 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
   public __prepareForEditing(): Promise<void> | undefined {
     if (this.__canAttachEditor()) {
       return undefined;
+    }
+    if (this.fileDiff?.isPartial === true && !canHydrateDiff(this.fileDiff)) {
+      throw new Error(
+        'FileDiff: this partial diff cannot be hydrated; provide a complete diff to edit'
+      );
     }
     this.loadFilesIfNecessary();
     return this.pendingFiles?.promise;

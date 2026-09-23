@@ -777,6 +777,41 @@ afterAll(async () => {
 });
 
 describe('CodeView item edit mode', () => {
+  test('releases an unhydratable partial item when editor preparation throws', () => {
+    const { cleanup } = installDom();
+    const root = createRoot();
+    const viewer = new CodeView({
+      createEditor: (type, options) => new Editor(type, options),
+    });
+    const partial = parsePatchFiles(
+      [
+        'diff --git a/new.txt b/new.txt\n',
+        'new file mode 100644\n',
+        'index 0000000..1111111\n',
+        '--- /dev/null\n',
+        '+++ b/new.txt\n',
+        '@@ -0,0 +1 @@\n',
+        '+hello\n',
+      ].join(''),
+      'new.txt',
+      true
+    )[0]?.files[0];
+    if (partial == null) throw new Error('Expected partial diff');
+    try {
+      viewer.setup(root);
+      viewer.setItems([
+        { id: 'new', type: 'diff', fileDiff: partial, version: 0, edit: true },
+      ]);
+      expect(() => viewer.render(true)).toThrow(
+        'this partial diff cannot be hydrated'
+      );
+      expect(root.querySelector('diffs-container')).toBeNull();
+    } finally {
+      viewer.cleanUp();
+      cleanup();
+    }
+  });
+
   test('validates the factory only when a rendered item needs an editor', async () => {
     await expectMissingEditorFactoryOnRender((viewer) => {
       const initial = makeTextEditFileItem('initial', true, 2);

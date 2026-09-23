@@ -2179,16 +2179,16 @@ export class CodeView<LAnnotation = undefined, Caret = undefined> {
     }
 
     const record = this.itemEditors.get(id);
-    if (
-      record == null &&
-      item.type === 'diff' &&
-      !item.instance.__canAttachEditor()
-    ) {
-      void item.instance.__prepareForEditing();
-      return;
-    }
     let createdEditor: CodeViewEditor<LAnnotation, Caret> | undefined;
     try {
+      if (
+        record == null &&
+        item.type === 'diff' &&
+        !item.instance.__canAttachEditor()
+      ) {
+        void item.instance.__prepareForEditing();
+        return;
+      }
       if (record == null) {
         assertEditorFactory(createEditor);
         const state = getItemOptionsState(item.instance.options);

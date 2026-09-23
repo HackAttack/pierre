@@ -979,6 +979,7 @@ export class VirtualizedFileDiff<
     if (this.fileDiff == null) {
       return;
     }
+    this.loadFilesIfNecessary();
     if (this.isAdvancedMode()) {
       this.pendingExpansions ??= [];
       this.pendingExpansions.push({
@@ -995,7 +996,6 @@ export class VirtualizedFileDiff<
       this.resetLayoutCache({ includeEstimatedHeights: true });
       this.computeApproximateSize();
     }
-    this.loadFilesIfNecessary();
     this.forceRenderOverride = true;
     this.virtualizer.instanceChanged(this, true);
   };
