@@ -1572,10 +1572,8 @@ export class CodeView<LAnnotation = undefined, Caret = undefined> {
   }
 
   /**
-   * Get the live editor for an item currently in edit mode. Use this to drive
-   * editor APIs CodeView does not wrap (applyEdits, undo, setMarkers, …).
-   * Returns undefined once the item's session ends (edit off or removal); a
-   * collapsed item keeps its suspended editor.
+   * Returns the editor while this item is being edited. Partial diffs get an
+   * editor after their files load; scrolling away or collapsing keeps it.
    */
   public getEditor(
     itemId: string
@@ -2181,6 +2179,14 @@ export class CodeView<LAnnotation = undefined, Caret = undefined> {
     }
 
     const record = this.itemEditors.get(id);
+    if (
+      record == null &&
+      item.type === 'diff' &&
+      !item.instance.__canAttachEditor()
+    ) {
+      void item.instance.__prepareForEditing();
+      return;
+    }
     let createdEditor: CodeViewEditor<LAnnotation, Caret> | undefined;
     try {
       if (record == null) {

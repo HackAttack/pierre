@@ -578,7 +578,7 @@ export class VirtualizedFileDiff<
         // and treat it as a mutation
         Object.assign(fileDiff, pendingHydratedDiff.nextDiff);
         this.setHydratedState(pendingHydratedDiff.files);
-        this.startHydratedEditSession(fileDiff);
+        this.installHydratedSessionDiff(fileDiff);
         this.forceRenderOverride = true;
         resetLayoutCache = true;
         resetEstimatedHeights = true;
@@ -1025,7 +1025,7 @@ export class VirtualizedFileDiff<
     } else {
       hydratePartialDiff('merge', expectedDiff, files);
       this.setHydratedState(files);
-      if (!this.startHydratedEditSession(expectedDiff)) {
+      if (!this.installHydratedSessionDiff(expectedDiff)) {
         await awaitWithTimeout(() => this.primeHighlightCache(expectedDiff));
         if (!this.enabled || this.fileDiff !== expectedDiff) {
           return;

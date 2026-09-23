@@ -702,6 +702,9 @@ describe('__completeEditSession', () => {
       forceRender: true,
       lineAnnotations: config?.lineAnnotations,
     });
+    if (externalDiff.isPartial) {
+      await instance.__prepareForEditing();
+    }
     editor.edit(instance);
     await waitFor(
       () => editor.getText() === externalDiff.additionLines.join(''),

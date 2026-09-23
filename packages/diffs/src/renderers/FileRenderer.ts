@@ -592,23 +592,18 @@ export class FileRenderer<LAnnotation = undefined> {
     }
   }
 
-  // normally triggered by the host when the document line count changes
+  // Reconcile the session source even when no highlighted result exists. A
+  // suspended editor can still receive programmatic edits after cache clear.
   public applyDocumentChange(
     textDocument: TextDocument<'file', LAnnotation>
   ): void {
     const { pendingStructuralRows, renderCache } = this;
     this.pendingStructuralRows = undefined;
-    if (renderCache == null) {
+    const file = this.file ?? renderCache?.file;
+    if (file == null) {
       return;
     }
-    const { file, result } = renderCache;
-    // Without a result there is nothing to reconcile the document against, so
-    // do not record it either: the document cache must never claim line
-    // counts the (possibly still highlighting) result cannot back, or the
-    // async highlight pass would process lines that do not exist.
-    if (result == null) {
-      return undefined;
-    }
+    const result = renderCache?.result;
     // Structural edits renumber cached HAST rows. Keep the unchanged prefix
     // and suffix, and plain-fill only the window that still needs tokenizing.
     const previousLines =
@@ -616,7 +611,7 @@ export class FileRenderer<LAnnotation = undefined> {
         ? this.lineCache.lines
         : linesFromFileContents(file.contents);
     const nextLines = linesFromFileContents(textDocument.getText());
-    if (previousLines.length !== nextLines.length) {
+    if (result != null && previousLines.length !== nextLines.length) {
       const maxShared = Math.min(previousLines.length, nextLines.length);
       let prefix = 0;
       while (
@@ -683,17 +678,20 @@ export class FileRenderer<LAnnotation = undefined> {
           line.properties['data-line-index'] = i;
         }
       }
-      renderCache.isDirty = true;
+      if (renderCache != null) {
+        renderCache.isDirty = true;
+      }
     }
     // Replace the old split-line cache with the authoritative edited document.
+    const contents = textDocument.getText();
     this.lineCache = {
       cacheKey: file.cacheKey,
       file,
-      sourceContents: file.contents,
+      sourceContents: contents,
       lines: nextLines,
     };
     this.textDocumentCache.set(file, textDocument);
-    file.contents = textDocument.getText();
+    file.contents = contents;
   }
 
   public renderFile(

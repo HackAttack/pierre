@@ -440,7 +440,7 @@ describe('VirtualizedFileDiff partial hydration', () => {
     }
   });
 
-  test('advanced edit hydration survives recycling before layout consumption', async () => {
+  test('advanced edit waits for hydration staged across recycling', async () => {
     const { oldFile, newFile, partial } = createPartialChange('advanced.ts');
     partial.cacheKey = 'external:advanced-partial';
     const deferred = createDeferred<{
@@ -462,7 +462,7 @@ describe('VirtualizedFileDiff partial hydration', () => {
     try {
       instance.updateCodeViewLayout(partial, 0);
       const editor = createEditorInstance('file-diff');
-      detach = instance.__attachEditor(editor);
+      void instance.__prepareForEditing();
       const loadPromise = instance.getPendingFileLoadPromiseForTest();
       assertDefined(loadPromise, 'expected edit hydration to be pending');
 
@@ -475,17 +475,15 @@ describe('VirtualizedFileDiff partial hydration', () => {
       instance.cleanUp(true);
       instance.updateCodeViewLayout(partial, 0);
 
-      const recycledSession = instance.getLatestDiffForTest();
-      expect(recycledSession).not.toBe(partial);
-      expect(recycledSession?.cacheKey).toBeUndefined();
+      expect(instance.getLatestDiffForTest()).toBe(partial);
       expect(partial.isPartial).toBe(false);
 
       instance.virtualizedSetup();
       instance.updateCodeViewLayout(partial, 0);
-      instance.__resumeEditor(editor);
+      detach = instance.__attachEditor(editor);
 
       const sessionDiff = instance.getLatestDiffForTest();
-      expect(sessionDiff).toBe(recycledSession);
+      expect(sessionDiff).not.toBe(partial);
       expect(instance.fileDiff).toBe(partial);
       expect(partial.isPartial).toBe(false);
       expect(partial.cacheKey).toBe('external:advanced-partial:hydrated');
@@ -564,7 +562,7 @@ describe('VirtualizedFileDiff partial hydration', () => {
     }
   });
 
-  test('simple edit hydration creates its session from the hydrated base', async () => {
+  test('simple edit attaches after hydration and uses the full diff as its base', async () => {
     const { oldFile, newFile, partial } = createPartialChange('simple.ts');
     partial.cacheKey = 'external:simple-partial';
     const deferred = createDeferred<{
@@ -585,12 +583,16 @@ describe('VirtualizedFileDiff partial hydration', () => {
 
     try {
       instance.updateCodeViewLayout(partial, 0);
-      detach = instance.__attachEditor(createEditorInstance('file-diff'));
+      expect(() =>
+        instance.__attachEditor(createEditorInstance('file-diff'))
+      ).toThrow('a complete diff is required before editing');
+      void instance.__prepareForEditing();
       const loadPromise = instance.getPendingFileLoadPromiseForTest();
       assertDefined(loadPromise, 'expected edit hydration to be pending');
 
       deferred.resolve({ oldFile, newFile });
       await loadPromise;
+      detach = instance.__attachEditor(createEditorInstance('file-diff'));
 
       const sessionDiff = instance.getLatestDiffForTest();
       expect(instance.fileDiff).toBe(partial);
