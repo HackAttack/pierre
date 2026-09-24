@@ -1269,7 +1269,7 @@ export class FileDiff<LAnnotation = undefined, Caret = undefined> {
   ): Promise<void> {
     try {
       const files = await loadDiffFiles(fileDiff);
-      if (!this.enabled || this.fileDiff !== fileDiff) {
+      if (this.fileDiff !== fileDiff) {
         return;
       }
 

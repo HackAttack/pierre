@@ -48,6 +48,10 @@ creation-time inputs for an editor. Changing them does not replace an active
 editor; the latest values apply when a later edit session creates another
 editor. Keep factories and object props stable across renders.
 
+When `loadDiffFiles` is configured, setting `edit` on a partial `FileDiff`
+starts loading the full files. The editor attaches after loading finishes, so
+`onAttach` runs then, not when `edit` first becomes true.
+
 <EditComponentTabs
   fileExample={editReactExample}
   fileDiffExample={editReactFileDiffExample}
@@ -59,6 +63,11 @@ editor. Keep factories and object props stable across renders.
 Render the component first, then attach an editor of the matching type. Keep the
 function returned by `edit()` and call it for a normal, install-capable
 completion.
+
+If a `FileDiff` may be partial, configure `loadDiffFiles` and await
+`fileDiffInstance.prepareForEditing()` before calling
+`editor.edit(fileDiffInstance)`. It resolves when the full files are ready;
+`editor.edit()` cannot start a new session while the diff is partial.
 
 Set `onEditChange` in the component's `FileOptions` or `FileDiffOptions` to
 monitor live changes while in edit mode. Use `onEditComplete` to accept or

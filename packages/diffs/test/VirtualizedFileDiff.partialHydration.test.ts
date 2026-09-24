@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { createTwoFilesPatch } from 'diff';
 
 import { disposeHighlighter, parseDiffFromFile, parsePatchFiles } from '../src';
@@ -8,8 +8,21 @@ import type { FileContents, FileDiffMetadata } from '../src/types';
 import { installDom, wait } from './domHarness';
 import { createEditorInstance } from './editorTestUtils';
 import { assertDefined, createDeferred } from './testUtils';
+import {
+  createInitializedManager,
+  installAnimationFramePolyfill,
+  respondToDiffRequest,
+  withTimeout,
+} from './workerPoolHarness';
+
+let restoreAnimationFrame: (() => void) | undefined;
+
+beforeAll(() => {
+  restoreAnimationFrame = installAnimationFramePolyfill();
+});
 
 afterAll(async () => {
+  restoreAnimationFrame?.();
   await disposeHighlighter();
 });
 
@@ -469,6 +482,64 @@ describe('VirtualizedFileDiff partial hydration', () => {
       expect(instance.fileDiff).toBe(partial);
     } finally {
       instance?.cleanUp();
+    }
+  });
+
+  test('caches a load highlighted while recycled for the next layout', async () => {
+    const { oldFile, newFile, partial } = createPartialChange('offscreen.ts');
+    partial.cacheKey = 'external:offscreen-partial';
+    const deferred = createDeferred<{
+      oldFile: FileContents;
+      newFile: FileContents;
+    }>();
+    const { manager, worker } = await createInitializedManager();
+    const virtualizerState = createAdvancedVirtualizer();
+    let loadCalls = 0;
+    const instance = new TestVirtualizedFileDiff(
+      {
+        disableFileHeader: true,
+        loadDiffFiles: () => {
+          loadCalls++;
+          return deferred.promise;
+        },
+      },
+      virtualizerState.virtualizer,
+      undefined,
+      manager
+    );
+
+    try {
+      instance.updateCodeViewLayout(partial, 0);
+      void instance.__prepareForEditing();
+      const loadPromise = instance.getPendingFileLoadPromiseForTest();
+      assertDefined(loadPromise, 'expected edit hydration to be pending');
+
+      instance.cleanUp(true);
+      deferred.resolve({ oldFile, newFile });
+      const request = await withTimeout(worker.waitForDiffRequest());
+      expect(request.diff.isPartial).toBe(false);
+      expect(request.diff.cacheKey).toBe('external:offscreen-partial:hydrated');
+      expect(manager.getDiffResultCache(request.diff)).toBeUndefined();
+      respondToDiffRequest(manager, worker, request);
+      await withTimeout(loadPromise);
+
+      expect(loadCalls).toBe(1);
+      expect(manager.getDiffResultCache(request.diff)).toBeDefined();
+      expect(partial.isPartial).toBe(true);
+      expect(virtualizerState.instanceChangedCalls).toEqual([
+        { layoutDirty: true },
+      ]);
+
+      instance.virtualizedSetup();
+      instance.updateCodeViewLayout(partial, 0);
+      expect(partial.isPartial).toBe(false);
+      expect(instance.fileDiff).toBe(partial);
+      expect(manager.getDiffResultCache(partial)).toBeDefined();
+      expect(worker.diffRequestCount).toBe(1);
+      expect(loadCalls).toBe(1);
+    } finally {
+      instance.cleanUp();
+      manager.terminate();
     }
   });
 

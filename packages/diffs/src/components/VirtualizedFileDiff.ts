@@ -1014,7 +1014,7 @@ export class VirtualizedFileDiff<
     if (this.isAdvancedMode()) {
       const nextDiff = hydratePartialDiff('clone', expectedDiff, files);
       await awaitWithTimeout(() => this.primeHighlightCache(nextDiff));
-      if (!this.enabled || this.fileDiff !== expectedDiff) {
+      if (this.fileDiff !== expectedDiff) {
         return;
       }
       this.pendingHydratedDiff = {
@@ -1027,7 +1027,7 @@ export class VirtualizedFileDiff<
       this.setHydratedState(files);
       if (!this.installHydratedSessionDiff(expectedDiff)) {
         await awaitWithTimeout(() => this.primeHighlightCache(expectedDiff));
-        if (!this.enabled || this.fileDiff !== expectedDiff) {
+        if (this.fileDiff !== expectedDiff) {
           return;
         }
       }
