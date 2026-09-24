@@ -76,10 +76,13 @@ session ends. Return `'accept'` to install `nextItem`; a controlled component
 must also mirror it into its own state. Return `'reject'` to restore the latest
 external item. A missing handler will automatically reject.
 
-When `loadDiffFiles` is configured, editing a partial diff item starts loading
-the full files. The editor attaches once they have loaded and the item renders.
-Until then, `getEditor(itemId)` returns `undefined`; the editor's `onAttach`
-callback runs when it attaches.
+A partial diff item in edit mode starts loading its full files when it renders
+(in view, not collapsed). If it scrolls out during the load, CodeView keeps the
+result and primes its highlighting without rendering the item. The editor
+attaches once a load completes while the item is rendered. Until then
+`getEditor(itemId)` returns `undefined`, and `onAttach` runs after the editor's
+first render sync. A partial edit item without `loadDiffFiles` throws from
+`render()` once it renders.
 
 Collapsing or scrolling an item out of view suspends its session rather than
 completing it. Disabling editing, removing an item, `reset()`, `cleanUp()`, and
